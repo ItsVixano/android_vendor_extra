@@ -20,6 +20,9 @@ PRODUCT_DEX_PREOPT_BOOT_IMAGE_PROFILE_LOCATION := frameworks/base/config/boot-im
 SYSTEM_OPTIMIZE_JAVA := true
 SYSTEMUI_OPTIMIZE_JAVA := true
 
+# Reduce system server verbosity
+PRODUCT_SYSTEM_SERVER_DEBUG_INFO := false
+
 # Disable Scudo outside of eng builds to save RAM.
 ifneq (,$(filter eng, $(TARGET_BUILD_VARIANT)))
   PRODUCT_DISABLE_SCUDO := true
