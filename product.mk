@@ -46,5 +46,6 @@ PRODUCT_SOONG_NAMESPACES += \
 # Spoof `dev-keys` builds into `release-keys`
 ifneq ($(DEFAULT_SYSTEM_DEV_CERTIFICATE),build/make/target/product/security/testkey)
 PRODUCT_BUILD_PROP_OVERRIDES += \
-    BUILD_VERSION_TAGS="release-keys"
+    BUILD_VERSION_TAGS="release-keys" \
+    BUILD_DISPLAY_ID="$(BUILD_ID)"
 endif
