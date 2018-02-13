@@ -31,6 +31,5 @@ PRODUCT_ARTIFACT_PATH_REQUIREMENT_ALLOWED_LIST += \
     system/etc/init/ih8sn.rc
 endif
 
-# Default ADB shell prompt
-PRODUCT_SYSTEM_DEFAULT_PROPERTIES += \
-    persist.sys.adb.shell=/system_ext/bin/bash
+# Properties
+include $(LOCAL_PATH)/prop.mk
