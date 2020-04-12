@@ -2,6 +2,9 @@
 # go_vendor.prop for vendor/extra
 #
 
+# Memory optimizations
+ro.config.avoid_gfx_accel=true
+
 # Set lowram options
 ro.lmk.critical_upgrade=true
 ro.lmk.upgrade_pressure=40
