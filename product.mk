@@ -27,3 +27,7 @@ PRODUCT_ARTIFACT_PATH_REQUIREMENT_ALLOWED_LIST += \
     system/bin/ih8sn \
     system/etc/ih8sn.conf \
     system/etc/init/ih8sn.rc
+
+# Default ADB shell prompt
+PRODUCT_SYSTEM_DEFAULT_PROPERTIES += \
+    persist.sys.adb.shell=/system_ext/bin/bash
