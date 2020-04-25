@@ -1,0 +1,6 @@
+#
+# system_ext.prop for vendor/extra
+#
+
+# Dex2oat
+dalvik.vm.dex2oat64.enabled=true
