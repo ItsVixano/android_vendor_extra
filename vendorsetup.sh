@@ -5,6 +5,10 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+# Override host metadata to make builds more reproducible and avoid leaking info
+export BUILD_USERNAME=itsvixano
+export BUILD_HOSTNAME=android-build
+
 # Defs
 LOS_VERSION=$(grep "PRODUCT_VERSION_MAJOR" $(gettop)/vendor/lineage/config/version.mk | sed 's/PRODUCT_VERSION_MAJOR = //g' | head -1)
 VENDOR_EXTRA_PATH=$(gettop)/vendor/extra
