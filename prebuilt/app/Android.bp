@@ -1,0 +1,17 @@
+//
+// Copyright (C) 2022 The LineageOS Project
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+
+android_app_import {
+    name: "GrapheneCamera",
+    apk: "GrapheneCamera/GrapheneCamera.apk",
+    default_dev_cert: true,
+    product_specific: true,
+    overrides: ["Camera2"],
+    optional_uses_libs: ["androidx.camera.extensions.impl"],
+    dex_preopt: {
+        enabled: false,
+    },
+}

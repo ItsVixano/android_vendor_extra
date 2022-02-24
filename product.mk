@@ -11,3 +11,7 @@ PRODUCT_SOONG_NAMESPACES += \
 # Overlays
 PRODUCT_PACKAGES += \
     UpdaterOverlay
+
+# Apps
+PRODUCT_PACKAGES += \
+    GrapheneCamera
