@@ -12,3 +12,7 @@ PRODUCT_SOONG_NAMESPACES += \
 PRODUCT_PACKAGES += \
     BromiteWebViewOverlay \
     LineageUpdaterOverlay
+
+# Apps
+PRODUCT_PACKAGES += \
+    GrapheneCamera
