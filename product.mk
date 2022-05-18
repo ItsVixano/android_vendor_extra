@@ -10,6 +10,7 @@ PRODUCT_SOONG_NAMESPACES += \
 
 # Overlays
 PRODUCT_PACKAGES += \
+    BromiteWebViewOverlay \
     LineageSettingsOverlay \
     LineageUpdaterOverlay
 
