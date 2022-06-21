@@ -19,6 +19,7 @@ int main(int argc, char *argv[]) {
     const auto config = load_config();
     const auto build_fingerprint = config.find("BUILD_FINGERPRINT");
     const auto build_security_patch_date = config.find("BUILD_SECURITY_PATCH_DATE");
+    const auto vendor_build_security_patch_date = config.find("VENDOR_BUILD_SECURITY_PATCH_DATE");
     const auto build_version_release = config.find("BUILD_VERSION_RELEASE");
     const auto build_version_release_or_codename = config.find("BUILD_VERSION_RELEASE_OR_CODENAME");
     const auto manufacturer_name = config.find("MANUFACTURER_NAME");
@@ -44,6 +45,11 @@ int main(int argc, char *argv[]) {
     if (is_boot_completed_stage && build_security_patch_date != config.end()) {
         property_override("ro.build.version.security_patch",
                 build_security_patch_date->second.c_str());
+    }
+
+    if (is_boot_completed_stage && vendor_build_security_patch_date != config.end()) {
+        property_override("ro.vendor.build.security_patch",
+                vendor_build_security_patch_date->second.c_str());
     }
 
     if (is_init_stage && manufacturer_name != config.end()) {
