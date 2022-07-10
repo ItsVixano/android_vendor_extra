@@ -7,12 +7,14 @@
 
 #
 # Usage:
-# ./los_ota_json.py zipname
+# ./los_ota_json.py
 #
 
-import os, sys, hashlib, subprocess, glob
+import os, hashlib, subprocess, glob
 
+rom_name = "lineage"
 version = "19.1"
+
 datetime = (
     subprocess.Popen(
         ["/bin/grep", "ro.build.date.utc", "system/build.prop"], stdout=subprocess.PIPE
@@ -23,16 +25,9 @@ datetime = (
     .replace("ro.build.date.utc=", "")
 )
 filename = max(
-    glob.glob(
-        os.getcwd()
-        + "/lineage-"
-        + version
-        + "*"
-        + os.path.basename(os.getcwd())
-        + ".zip"
-    ),
+    glob.glob(rom_name + "-" + version + "*" + os.path.basename(os.getcwd()) + ".zip"),
     key=os.path.getctime,
-).replace(os.getcwd() + "/", "")
+)
 id = hashlib.md5(open(filename, "rb").read()).hexdigest()
 size = os.stat(filename).st_size
 
