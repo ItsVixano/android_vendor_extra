@@ -10,22 +10,21 @@
 # ./los_ota_json.py
 #
 
-import os, hashlib, subprocess, glob
+import os, hashlib, re, glob
 
 rom_name = "lineage"
 version = "19.1"
 
-datetime = (
-    subprocess.Popen(
-        ["/bin/grep", "ro.build.date.utc", "system/build.prop"], stdout=subprocess.PIPE
-    )
-    .communicate()[0]
-    .decode("utf-8")
-    .strip()
-    .replace("ro.build.date.utc=", "")
-)
+
+def getprop(prop):
+    return re.search(r"(?<=" + prop + "=).*", open("system/build.prop").read()).group(0)
+
+
+datetime = getprop("ro.build.date.utc")
 filename = max(
-    glob.glob(rom_name + "-" + version + "*" + os.path.basename(os.getcwd()) + ".zip"),
+    glob.glob(
+        rom_name + "-" + version + "*" + getprop("ro.product.system.device") + ".zip"
+    ),
     key=os.path.getctime,
 )
 id = hashlib.md5(open(filename, "rb").read()).hexdigest()
