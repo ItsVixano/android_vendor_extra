@@ -29,6 +29,7 @@ filename = max(
 )
 id = hashlib.md5(open(filename, "rb").read()).hexdigest()
 size = os.stat(filename).st_size
+incremental = getprop("ro.build.version.incremental")
 
 print(
     """
@@ -45,6 +46,8 @@ print(
     }
   ]
 }
+
+Place a dummy json file named "%s.json"
 """
-    % (datetime, filename, id, size, version)
+    % (datetime, filename, id, size, version, incremental)
 )
