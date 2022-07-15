@@ -17,14 +17,13 @@ def getprop(prop):
     ).group(0)
 
 
-rom_name = "lineage"
 version, datetime, incremental = (
     getprop("ro.lineage.build.version"),  # version
     getprop("ro.build.date.utc"),  # datetime
     getprop("ro.build.version.incremental"),  # incremental
 )
 filename = max(
-    glob("".join([rom_name, "-", version, "*", ".zip"])),
+    glob("".join(["lineage-", version, "*", ".zip"])),
     key=os.path.getctime,
 )
 id = md5(open(filename, "rb").read()).hexdigest()
