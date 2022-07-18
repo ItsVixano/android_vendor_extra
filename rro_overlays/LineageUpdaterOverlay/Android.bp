@@ -5,6 +5,6 @@
 //
 
 runtime_resource_overlay {
-    name: "UpdaterOverlay",
+    name: "LineageUpdaterOverlay",
     product_specific: true,
 }

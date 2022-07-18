@@ -11,7 +11,7 @@ PRODUCT_SOONG_NAMESPACES += \
 # Overlays
 PRODUCT_PACKAGES += \
     LineageSettingsOverlay \
-    UpdaterOverlay
+    LineageUpdaterOverlay
 
 # Apps
 PRODUCT_PACKAGES += \
