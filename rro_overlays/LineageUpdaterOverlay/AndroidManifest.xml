@@ -8,5 +8,9 @@
     package="org.lineageos.updater.custom"
     android:versionCode="1"
     android:versionName="1.0">
-    <overlay android:targetPackage="org.lineageos.updater" android:priority="0" android:isStatic="true" />
+
+    <overlay
+        android:isStatic="true"
+        android:priority="0"
+        android:targetPackage="org.lineageos.updater" />
 </manifest>
