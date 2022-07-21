@@ -9,3 +9,5 @@
 
 export VENDOR_PATCHES_PATH=$(gettop)/vendor/extra/build/patches
 . "$VENDOR_PATCHES_PATH"/apply-patches.sh
+
+unset JAVAC
