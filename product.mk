@@ -18,6 +18,7 @@ PRODUCT_PACKAGES += \
     GrapheneCamera
 
 # ih8sn
+ifneq ($(TARGET_BUILD_VARIANT), eng)
 PRODUCT_PACKAGES += \
     ih8sn
 
@@ -28,3 +29,4 @@ PRODUCT_ARTIFACT_PATH_REQUIREMENT_ALLOWED_LIST += \
     system/bin/ih8sn \
     system/etc/ih8sn.conf \
     system/etc/init/ih8sn.rc
+endif
