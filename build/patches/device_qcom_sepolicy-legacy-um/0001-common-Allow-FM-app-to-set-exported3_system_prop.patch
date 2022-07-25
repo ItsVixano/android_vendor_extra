@@ -1,0 +1,28 @@
+From f3e90ba9a2f2d93e51a33f59c25781e40bf9c1ba Mon Sep 17 00:00:00 2001
+From: Jarl-Penguin <jarlpenguin@outlook.com>
+Date: Wed, 23 Feb 2022 18:33:51 +0100
+Subject: [PATCH] common: Allow FM app to set exported3_system_prop
+
+* hw.fm.init is labeled as such
+
+Signed-off-by: Jarl-Penguin <jarlpenguin@outlook.com>
+Change-Id: I4438152618c29e5fed771235d58410e769a328ca
+---
+ legacy/vendor/common/fm_app.te | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/legacy/vendor/common/fm_app.te b/legacy/vendor/common/fm_app.te
+index faea0f01..971b79e4 100644
+--- a/legacy/vendor/common/fm_app.te
++++ b/legacy/vendor/common/fm_app.te
+@@ -43,6 +43,7 @@ unix_socket_connect(vendor_fm_app,bluetooth, bluetooth)
+ #allow vendor_fm_app wcnss_filter:unix_stream_socket connectto;
+ allow vendor_fm_app fm_radio_device:chr_file r_file_perms;
+ get_prop(vendor_fm_app, vendor_fm_prop)
++set_prop(vendor_fm_app, exported3_system_prop)
+ 
+ set_prop(vendor_fm_app, ctl_start_prop)
+ set_prop(vendor_fm_app, ctl_stop_prop)
+-- 
+2.36.1
+

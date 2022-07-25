@@ -1,0 +1,60 @@
+From fda234dfb03b62e8bc28a681b5f3e4acac33ca7a Mon Sep 17 00:00:00 2001
+From: Jarl-Penguin <jarlpenguin@outlook.com>
+Date: Wed, 23 Feb 2022 15:31:08 +0100
+Subject: [PATCH] soong: Add TARGET_QCOM_NO_FM_FIRMWARE conditional
+
+Signed-off-by: Jarl-Penguin <jarlpenguin@outlook.com>
+Change-Id: I83cbf855839a57c3506f0d8b6c538224a2a148e3
+---
+ build/soong/Android.bp     | 17 +++++++++++++++++
+ config/BoardConfigSoong.mk |  2 ++
+ 2 files changed, 19 insertions(+)
+
+diff --git a/build/soong/Android.bp b/build/soong/Android.bp
+index ecfa9ac5..64cae263 100644
+--- a/build/soong/Android.bp
++++ b/build/soong/Android.bp
+@@ -498,3 +498,20 @@ stagefright_qcom_legacy {
+         },
+     },
+ }
++
++soong_config_module_type {
++    name: "qcom_no_fm_firmware",
++    module_type: "cc_defaults",
++    config_namespace: "lineageQcomVars",
++    bool_variables: ["qcom_no_fm_firmware"],
++    properties: ["cppflags"],
++}
++
++qcom_no_fm_firmware {
++    name: "qcom_no_fm_firmware_defaults",
++    soong_config_variables: {
++        qcom_no_fm_firmware: {
++            cppflags: ["-DQCOM_NO_FM_FIRMWARE"],
++        },
++    },
++}
+diff --git a/config/BoardConfigSoong.mk b/config/BoardConfigSoong.mk
+index bde1fdcc..75f6c8d5 100644
+--- a/config/BoardConfigSoong.mk
++++ b/config/BoardConfigSoong.mk
+@@ -49,6 +49,7 @@ SOONG_CONFIG_lineageNvidiaVars += \
+ SOONG_CONFIG_NAMESPACES += lineageQcomVars
+ SOONG_CONFIG_lineageQcomVars += \
+     legacy_hw_disk_encryption \
++    qcom_no_fm_firmware \
+     should_wait_for_qsee \
+     supports_extended_compress_format \
+     supports_hw_fde \
+@@ -72,6 +73,7 @@ SOONG_CONFIG_lineageGlobalVars_needs_camera_boottime := $(TARGET_CAMERA_BOOTTIME
+ SOONG_CONFIG_lineageGlobalVars_needs_netd_direct_connect_rule := $(TARGET_NEEDS_NETD_DIRECT_CONNECT_RULE)
+ SOONG_CONFIG_lineageNvidiaVars_uses_nv_enhancements := $(NV_ANDROID_FRAMEWORK_ENHANCEMENTS)
+ SOONG_CONFIG_lineageQcomVars_legacy_hw_disk_encryption := $(TARGET_LEGACY_HW_DISK_ENCRYPTION)
++SOONG_CONFIG_lineageQcomVars_qcom_no_fm_firmware := $(TARGET_QCOM_NO_FM_FIRMWARE)
+ SOONG_CONFIG_lineageQcomVars_should_wait_for_qsee := $(TARGET_KEYMASTER_WAIT_FOR_QSEE)
+ SOONG_CONFIG_lineageQcomVars_supports_extended_compress_format := $(AUDIO_FEATURE_ENABLED_EXTENDED_COMPRESS_FORMAT)
+ SOONG_CONFIG_lineageQcomVars_supports_hw_fde := $(TARGET_HW_DISK_ENCRYPTION)
+-- 
+2.36.1
+
