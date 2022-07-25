@@ -1,4 +1,4 @@
-From c2c951d44b44cd0cbc0de989f9e9235d0cc1ff52 Mon Sep 17 00:00:00 2001
+From 12d297cd3eaa84b83d5000962a9ecb83639ba6b5 Mon Sep 17 00:00:00 2001
 From: himta ram <hram@codeaurora.org>
 Date: Tue, 31 Dec 2019 12:23:19 +0100
 Subject: [PATCH] sepolicy-legacy-um: Add sepolicy support for FM domain switch
@@ -13,11 +13,11 @@ Original change-Id: I40a4f68eb8ded948d44653d3bc0209bbb3d9ef35
 Change-Id: Ic889597e504379e6b3e302a9be33f87842b4e7ea
 ---
  legacy/vendor/common/device.te |  2 +-
- legacy/vendor/common/fm_app.te | 12 ++++++++++++
- 2 files changed, 13 insertions(+), 1 deletion(-)
+ legacy/vendor/common/fm_app.te | 13 +++++++++++++
+ 2 files changed, 14 insertions(+), 1 deletion(-)
 
 diff --git a/legacy/vendor/common/device.te b/legacy/vendor/common/device.te
-index c0fbe99fc..644dbe818 100644
+index c0fbe99f..644dbe81 100644
 --- a/legacy/vendor/common/device.te
 +++ b/legacy/vendor/common/device.te
 @@ -62,7 +62,7 @@ type hvdcp_device, dev_type;
@@ -30,10 +30,10 @@ index c0fbe99fc..644dbe818 100644
  #Add for storage pertitions for EFS partitions
  type modem_efs_partition_device, dev_type;
 diff --git a/legacy/vendor/common/fm_app.te b/legacy/vendor/common/fm_app.te
-index 7c424d88b..03b1b6b99 100644
+index 7c424d88..faea0f01 100644
 --- a/legacy/vendor/common/fm_app.te
 +++ b/legacy/vendor/common/fm_app.te
-@@ -33,3 +33,15 @@ hal_client_domain(vendor_fm_app, hal_fm);
+@@ -33,3 +33,16 @@ hal_client_domain(vendor_fm_app, hal_fm);
  hal_client_domain(vendor_fm_app, hal_btconfigstore);
  get_prop(vendor_fm_app, vendor_bluetooth_prop)
  allow vendor_fm_app hal_perf_hwservice:hwservice_manager find;
@@ -46,6 +46,7 @@ index 7c424d88b..03b1b6b99 100644
 +# access  wcnss_filter from fm app
 +#allow vendor_fm_app wcnss_filter:unix_stream_socket connectto;
 +allow vendor_fm_app fm_radio_device:chr_file r_file_perms;
++get_prop(vendor_fm_app, vendor_fm_prop)
 +
 +set_prop(vendor_fm_app, ctl_start_prop)
 +set_prop(vendor_fm_app, ctl_stop_prop)
