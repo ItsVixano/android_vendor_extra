@@ -1,0 +1,54 @@
+From c2c951d44b44cd0cbc0de989f9e9235d0cc1ff52 Mon Sep 17 00:00:00 2001
+From: himta ram <hram@codeaurora.org>
+Date: Tue, 31 Dec 2019 12:23:19 +0100
+Subject: [PATCH] sepolicy-legacy-um: Add sepolicy support for FM domain switch
+
+Switch FM app's domain from system to platform app.
+Add sepolicy rules for fm in platform_app domain.
+Reomve fm sepolicy rules from system_app domain.
+
+CRs-fixed: 2595596
+Original change-Id: I40a4f68eb8ded948d44653d3bc0209bbb3d9ef35
+
+Change-Id: Ic889597e504379e6b3e302a9be33f87842b4e7ea
+---
+ legacy/vendor/common/device.te |  2 +-
+ legacy/vendor/common/fm_app.te | 12 ++++++++++++
+ 2 files changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/legacy/vendor/common/device.te b/legacy/vendor/common/device.te
+index c0fbe99fc..644dbe818 100644
+--- a/legacy/vendor/common/device.te
++++ b/legacy/vendor/common/device.te
+@@ -62,7 +62,7 @@ type hvdcp_device, dev_type;
+ type device_latency, dev_type;
+ 
+ #Added for fm_radio device
+-type  fm_radio_device, dev_type;
++type fm_radio_device, dev_type;
+ 
+ #Add for storage pertitions for EFS partitions
+ type modem_efs_partition_device, dev_type;
+diff --git a/legacy/vendor/common/fm_app.te b/legacy/vendor/common/fm_app.te
+index 7c424d88b..03b1b6b99 100644
+--- a/legacy/vendor/common/fm_app.te
++++ b/legacy/vendor/common/fm_app.te
+@@ -33,3 +33,15 @@ hal_client_domain(vendor_fm_app, hal_fm);
+ hal_client_domain(vendor_fm_app, hal_btconfigstore);
+ get_prop(vendor_fm_app, vendor_bluetooth_prop)
+ allow vendor_fm_app hal_perf_hwservice:hwservice_manager find;
++
++# required for FM App to connectto wcnss_filter sockets
++# serial device ttyHS0 (transport layer for FM)
++allow vendor_fm_app serial_device:chr_file rw_file_perms;
++# access unix sockets for fm application
++unix_socket_connect(vendor_fm_app,bluetooth, bluetooth)
++# access  wcnss_filter from fm app
++#allow vendor_fm_app wcnss_filter:unix_stream_socket connectto;
++allow vendor_fm_app fm_radio_device:chr_file r_file_perms;
++
++set_prop(vendor_fm_app, ctl_start_prop)
++set_prop(vendor_fm_app, ctl_stop_prop)
+-- 
+2.36.1
+
