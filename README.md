@@ -1,3 +1,6 @@
 # GitHub_release-script
 
-Check github_release.sh for further informations
+## Usage:
+```bash
+./github_releases.py <OWNER> <REPO> <TAG>
+```
