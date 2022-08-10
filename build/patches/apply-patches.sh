@@ -13,4 +13,5 @@ for project_name in $(cd "$VENDOR_PATCHES_PATH"; echo */); do
     git am --abort &> /dev/null
 done
 
+# Return to source rootdir
 croot
