@@ -49,34 +49,35 @@ GH_TOKEN = os.getenv("TOKEN")
 GH_OWNER = sys.argv[1]  # Github profile name
 GH_REPO = sys.argv[2]  # Github repo name
 GH_TAG = sys.argv[3]  # Github release tag name
-GH_BODY = open("release_body.txt", "r").read()
 GH_NAME = f"LineageOS 19.1 for {get_device(GH_REPO)[1]} ({GH_TAG})"
+GH_BODY = open("release_body.txt", "r").read()
+GH_ASSETS = os.listdir("uploads")
 
 # Calculate the sha1sums of the assets
-assets = os.listdir("uploads")
-first_line = True
-for asset in assets:
+GH_BODY += "\n### Sha1sums"
+for asset in GH_ASSETS:
     print(f"\nCalculating sha1sum for `{asset}`")
-    if first_line == True:
-        GH_BODY += f"- {asset}: `{sha1sum(asset)}`"
-        first_line = False
-    else:
-        GH_BODY += f"\n- {asset}: `{sha1sum(asset)}`"
+    GH_BODY += f"\n- {asset}: `{sha1sum(asset)}`"
 
 # Create release
-git = Github(GH_TOKEN)
-repo = git.get_repo(GH_OWNER + "/" + GH_REPO)
+print("\nCreating a release page ...")
+repo = Github(GH_TOKEN).get_repo(GH_OWNER + "/" + GH_REPO)
 repo.create_git_release(
     GH_TAG, GH_NAME, GH_BODY, True
 )  # tag_name, release_name, release_body, draft
 
-# Grab the output after wait
-GH_DRAFT_TAG = input(
-    f"\nGo on https://github.com/{GH_OWNER}/{GH_REPO}/releases, Select the draft release and paste the release id from the url (it starts with `untagged-`)\n"
-)
-
 # Upload assets
-for asset in assets:
+GH_DRAFT_TAG = input(
+    f"""
+For uploading the assets, you must provide the draft tag value of the release page
+To get it:
+
+> Go on https://github.com/{GH_OWNER}/{GH_REPO}/releases
+> Select the draft release
+> Copy and paste here the tag from the url (it starts with `untagged-`)\n
+"""
+)
+for asset in GH_ASSETS:
     print(f"\nUploading `{asset}`")
     repo.get_release(GH_DRAFT_TAG).upload_asset(f"uploads/{asset}")
 

@@ -3,5 +3,3 @@
 
 ### Notes
 - ...
-
-### Sha1sums
