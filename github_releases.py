@@ -14,20 +14,29 @@ from github import Github
 # Pre-checks
 if len(sys.argv) < 4:
     print(
-        """
-Please mention in which repo you want to create the releaase
+        "\nPlease mention in which repo you want to create the releaase\n\n    ex: ./github_releases.py ItsVixano-releases LineageOS_lisa 20220713\n"
+    )
+    exit()
 
-    ex: ./github_releases.py ItsVixano-releases LineageOS_lisa 20220713
-"""
+try:
+    if len(os.listdir("uploads")) == 0:
+        print(
+            "\nPlease make sure to create a folder named `uploads` with all the assets you want to upload inside it\n"
+        )
+        exit()
+except FileNotFoundError:
+    # Print out the same error
+    print(
+        "\nPlease make sure to create a folder named `uploads` with all the assets you want to upload inside it\n"
     )
     exit()
 
 # defs
 def get_device(var):
     return {
-        "LineageOS_ysl": {1: "Redmi S2/Y2"},
-        "LineageOS_daisy": {1: "Mi A2 Lite"},
-        "LineageOS_lisa": {1: "Xiaomi 11 Lite 5g NE"},
+        "LineageOS_ysl": {1: "Redmi S2/Y2", 2: "19.1"},
+        "LineageOS_daisy": {1: "Mi A2 Lite", 2: "19.1"},
+        "LineageOS_lisa": {1: "Xiaomi 11 Lite 5g NE", 2: "19.1"},
     }.get(var)
 
 
@@ -46,15 +55,20 @@ def sha1sum(var):
 # Vars
 load_dotenv()
 GH_TOKEN = os.getenv("TOKEN")
+GH_ASSETS = os.listdir("uploads")
 GH_OWNER = sys.argv[1]  # Github profile name
 GH_REPO = sys.argv[2]  # Github repo name
 GH_TAG = sys.argv[3]  # Github release tag name
-GH_NAME = f"LineageOS 19.1 for {get_device(GH_REPO)[1]} ({GH_TAG})"
-GH_BODY = open("release_body.txt", "r").read()
-GH_ASSETS = os.listdir("uploads")
+GH_NAME = f"LineageOS {get_device(GH_REPO)[2]} for {get_device(GH_REPO)[1]} ({GH_TAG})"
+GH_BODY = """### Changelog
+- ...
+
+### Notes
+- ...
+
+### Sha1sums"""
 
 # Calculate the sha1sums of the assets
-GH_BODY += "\n### Sha1sums"
 for asset in GH_ASSETS:
     print(f"\nCalculating sha1sum for `{asset}`")
     GH_BODY += f"\n- {asset}: `{sha1sum(asset)}`"
@@ -70,7 +84,6 @@ repo.create_git_release(
 GH_DRAFT_TAG = input(
     f"""
 For uploading the assets, you must provide the draft tag value of the release page
-To get it:
 
 > Go on https://github.com/{GH_OWNER}/{GH_REPO}/releases
 > Select the draft release
