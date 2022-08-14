@@ -10,6 +10,7 @@ import os
 import hashlib
 from dotenv import load_dotenv
 from github import Github
+from time import sleep
 
 # Pre-checks
 if len(sys.argv) < 4:
@@ -60,7 +61,7 @@ GH_OWNER = sys.argv[1]  # Github profile name
 GH_REPO = sys.argv[2]  # Github repo name
 GH_TAG = sys.argv[3]  # Github release tag name
 GH_NAME = f"LineageOS {get_device(GH_REPO)[2]} for {get_device(GH_REPO)[1]} ({GH_TAG})"
-GH_BODY = """### Changelog
+GH_MESSAGE = """### Changelog
 - ...
 
 ### Notes
@@ -71,27 +72,28 @@ GH_BODY = """### Changelog
 # Calculate the sha1sums of the assets
 for asset in GH_ASSETS:
     print(f"\nCalculating sha1sum for `{asset}`")
-    GH_BODY += f"\n- {asset}: `{sha1sum(asset)}`"
+    GH_MESSAGE += f"\n- {asset}: `{sha1sum(asset)}`"
 
 # Create release
 print("\nCreating a release page ...")
 repo = Github(GH_TOKEN).get_repo(GH_OWNER + "/" + GH_REPO)
-repo.create_git_release(
-    GH_TAG, GH_NAME, GH_BODY, True
-)  # tag_name, release_name, release_body, draft
+release = repo.create_git_release(
+    GH_TAG,  # tag
+    GH_NAME,  # name
+    GH_MESSAGE,  # message
+    draft=True,  # draft
+)  # More info here https://pygithub.readthedocs.io/en/latest/github_objects/Repository.html?highlight=create_git_release#github.Repository.Repository.create_git_release
 
 # Upload assets
-GH_DRAFT_TAG = input(
-    f"""
-For uploading the assets, you must provide the draft tag value of the release page
-
-> Go on https://github.com/{GH_OWNER}/{GH_REPO}/releases
-> Select the draft release
-> Copy and paste here the tag from the url (it starts with `untagged-`)\n
-"""
+print(
+    "\nSleep for 3 seconds, this is required for refreshing git api in order to get the latest untagged tag avaible in the repo"
 )
+sleep(3)  # Sleep for 3 second
+GH_RELEASE_TAG = os.popen(
+    f"curl -H 'Authorization: token {GH_TOKEN}' https://api.github.com/repos/{GH_OWNER}/{GH_REPO}/releases 2>&1 | grep untagged | sed 's/.*\///' | sed 's|\",||'| head -1"
+).read()
 for asset in GH_ASSETS:
     print(f"\nUploading `{asset}`")
-    repo.get_release(GH_DRAFT_TAG).upload_asset(f"uploads/{asset}")
+    repo.get_release(GH_RELEASE_TAG).upload_asset(f"uploads/{asset}")
 
 print("\nDone!")
