@@ -44,6 +44,7 @@ mka_build() {
     cp out/target/product/"$DEVICE"/recovery.img ~/public_html/giovanni/"$DEVICE"/
     cp out/target/product/"$DEVICE"/boot.img ~/public_html/giovanni/"$DEVICE"/
     cp out/target/product/"$DEVICE"/obj/PACKAGING/target_files_intermediates/*/IMAGES/vendor_boot.img ~/public_html/giovanni/"$DEVICE"/
+    cp out/target/product/"$DEVICE"/dtbo.img ~/public_html/giovanni/"$DEVICE"/
 
     echo -e "\n\nDone!"
 }
