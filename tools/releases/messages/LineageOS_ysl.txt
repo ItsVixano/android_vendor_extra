@@ -1,0 +1,13 @@
+### Changelog
+- ...
+
+### Notes
+- Selinux is enforcing
+- FBE build, don't use twrp for these builds
+- Custom kernels not supported
+- Signature spoofing enabled by default
+- SafetyNet passes out-of-the box without root
+- OTA pushed for existing users
+- [Read the instructions carefully](https://guide.itsvixano.me/)
+
+### Sha1sums

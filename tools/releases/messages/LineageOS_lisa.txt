@@ -1,0 +1,13 @@
+### Changelog
+- ...
+
+### Notes
+- Selinux is enforcing
+- OSS vendor and kernel
+- Custom kernels not supported
+- Signature spoofing enabled by default
+- SafetyNet passes out-of-the box without root
+- Coming from LineageOS 18.1 ?? Take a look [here](https://itsvixano.gitlab.io/lineageos_flashing/update/#upgrade-181-191)
+- [Read the instructions carefully](https://guide.itsvixano.me/)
+
+### Sha1sums

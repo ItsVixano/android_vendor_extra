@@ -13,9 +13,9 @@ from github import Github
 from time import sleep
 
 # Pre-checks
-if len(sys.argv) < 4:
+if len(sys.argv) < 3:
     print(
-        "\nPlease mention in which repo you want to create the releaase\n\n    ex: ./github_releases.py ItsVixano-releases LineageOS_lisa 20220713\n"
+        "\nPlease mention for which device you want to create the releaase\n\n    ex: ./github_releases.py lisa 20220713\n"
     )
     exit()
 
@@ -35,9 +35,9 @@ except FileNotFoundError:
 # defs
 def get_device(var):
     return {
-        "LineageOS_ysl": {1: "Redmi S2/Y2", 2: "19.1"},
-        "LineageOS_daisy": {1: "Mi A2 Lite", 2: "19.1"},
-        "LineageOS_lisa": {1: "Xiaomi 11 Lite 5g NE", 2: "19.1"},
+        "ysl": {1: "Redmi S2/Y2", 2: "19.1", 3: "LineageOS_ysl"},
+        "daisy": {1: "Mi A2 Lite", 2: "19.1", 3: "LineageOS_daisy"},
+        "lisa": {1: "Xiaomi 11 Lite 5g NE", 2: "19.1", 3: "LineageOS_lisa"},
     }.get(var)
 
 
@@ -57,17 +57,11 @@ def sha1sum(var):
 load_dotenv()
 GH_TOKEN = os.getenv("TOKEN")
 GH_ASSETS = os.listdir("uploads")
-GH_OWNER = sys.argv[1]  # Github profile name
-GH_REPO = sys.argv[2]  # Github repo name
-GH_TAG = sys.argv[3]  # Github release tag name
-GH_NAME = f"LineageOS {get_device(GH_REPO)[2]} for {get_device(GH_REPO)[1]} ({GH_TAG})"
-GH_MESSAGE = """### Changelog
-- ...
-
-### Notes
-- ...
-
-### Sha1sums"""
+GH_OWNER = "ItsVixano-releases"  # Github profile name
+GH_REPO = get_device(sys.argv[1])[3]  # Github repo name
+GH_TAG = sys.argv[2]  # Github release tag name
+GH_NAME = f"LineageOS {get_device(sys.argv[1])[2]} for {get_device(sys.argv[1])[1]} ({GH_TAG})"
+GH_MESSAGE = open(f"messages/{GH_REPO}.txt", "r").read()[:-1]
 
 # Calculate the sha1sums of the assets
 for asset in GH_ASSETS:
