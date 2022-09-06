@@ -32,22 +32,23 @@ mka_build() {
 
     # Defs
     DEVICE="$1"
+    BUILD_TYPE="userdebug" # ToDo: Don't hardcode it
 
     # Build
     croot # Make sure we are running this on source rootdir
-    lunch lineage_"$DEVICE"-userdebug
+    lunch lineage_"$DEVICE"-"$BUILD_TYPE"
     mka installclean
     mka bacon -j4
 
     # Upload build + extras
-    cp out/target/product/"$DEVICE"/lineage-19*.zip ~/public_html/giovanni/"$DEVICE"/
-    cp out/target/product/"$DEVICE"/recovery.img ~/public_html/giovanni/"$DEVICE"/
-    cp out/target/product/"$DEVICE"/boot.img ~/public_html/giovanni/"$DEVICE"/
-    cp out/target/product/"$DEVICE"/obj/PACKAGING/target_files_intermediates/*/IMAGES/vendor_boot.img ~/public_html/giovanni/"$DEVICE"/
-    cp out/target/product/"$DEVICE"/dtbo.img ~/public_html/giovanni/"$DEVICE"/
-
-    # Outputs OTA JSON
     cd out/target/product/"$DEVICE"/
+    cp lineage-19*.zip ~/public_html/giovanni/"$DEVICE"/
+    cp recovery.img ~/public_html/giovanni/"$DEVICE"/
+    cp boot.img ~/public_html/giovanni/"$DEVICE"/
+    cp obj/PACKAGING/target_files_intermediates/*/IMAGES/vendor_boot.img ~/public_html/giovanni/"$DEVICE"/
+    cp dtbo.img ~/public_html/giovanni/"$DEVICE"/
+
+    # Output OTA JSON
     los_ota_json
     croot
 
