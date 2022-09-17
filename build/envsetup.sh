@@ -5,6 +5,16 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+if [[ "$1" = "-h" || "$1" = "--help" ]]; then
+    cat <<'END'
+Usage:
+ . vendor/extra/build/envsetup.sh [ARGS]
+     -h/--help: Shows this screen
+     -p/--apply-patches: Apply the patches inside vendor/extra/build/patches folder
+END
+    return 0
+fi
+
 # Setup android env
 . build/envsetup.sh
 
@@ -13,7 +23,9 @@ export VENDOR_EXTRA_PATH=$(gettop)/vendor/extra/
 export VENDOR_PATCHES_PATH="$VENDOR_EXTRA_PATH"/build/patches
 
 # Apply patches
-. "$VENDOR_PATCHES_PATH"/apply-patches.sh
+if [[ "$1" = "-p" || "$1" = "--apply-patches" ]]; then
+    . "$VENDOR_PATCHES_PATH"/apply-patches.sh
+fi
 
 # functions
 los_ota_json() {
