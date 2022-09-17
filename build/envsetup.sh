@@ -45,7 +45,7 @@ mka_build() {
     cp lineage-19*.zip ~/public_html/giovanni/"$DEVICE"/
     cp recovery.img ~/public_html/giovanni/"$DEVICE"/
     cp boot.img ~/public_html/giovanni/"$DEVICE"/
-    cp obj/PACKAGING/target_files_intermediates/*/IMAGES/vendor_boot.img ~/public_html/giovanni/"$DEVICE"/
+    cp obj/PACKAGING/target_files_intermediates/*/IMAGES/vendor_*.img ~/public_html/giovanni/"$DEVICE"/
     cp dtbo.img ~/public_html/giovanni/"$DEVICE"/
 
     # Output OTA JSON
