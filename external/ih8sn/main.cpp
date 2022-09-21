@@ -16,49 +16,36 @@ int main(int argc, char *argv[]) {
     const auto is_init_stage = strcmp(argv[1], "init") == 0;
     const auto is_boot_completed_stage = strcmp(argv[1], "boot_completed") == 0;
 
-    const auto config = load_config();
-    const auto build_fingerprint = config.find("BUILD_FINGERPRINT");
-    const auto build_security_patch_date = config.find("BUILD_SECURITY_PATCH_DATE");
-    const auto vendor_build_security_patch_date = config.find("VENDOR_BUILD_SECURITY_PATCH_DATE");
-    const auto build_version_release = config.find("BUILD_VERSION_RELEASE");
-    const auto build_version_release_or_codename = config.find("BUILD_VERSION_RELEASE_OR_CODENAME");
-    const auto manufacturer_name = config.find("MANUFACTURER_NAME");
-    const auto product_name = config.find("PRODUCT_NAME");
+    const auto config = Config::from_file("/system/etc/ih8sn.conf");
 
-    if (is_init_stage && build_fingerprint != config.end()) {
+    if (is_init_stage && config.build_fingerprint != "") {
         property_override(property_list("ro.", "build.fingerprint"),
-                build_fingerprint->second.c_str());
-        property_override("ro.build.description",
-                fingerprint_to_description(build_fingerprint->second).c_str());
+                config.build_fingerprint.c_str());
+        property_override("ro.build.description", config.get_build_description().c_str());
     }
 
-    if (is_boot_completed_stage && build_version_release != config.end()) {
+    if (is_boot_completed_stage && config.build_version_release != "") {
         property_override(property_list("ro.", "build.version.release"),
-                build_version_release->second.c_str());
+                config.build_version_release.c_str());
     }
 
-    if (is_boot_completed_stage && build_version_release_or_codename != config.end()) {
+    if (is_boot_completed_stage && config.build_version_release_or_codename != "") {
         property_override(property_list("ro.", "build.version.release_or_codename"),
-                build_version_release_or_codename->second.c_str());
+                config.build_version_release_or_codename.c_str());
     }
 
-    if (is_boot_completed_stage && build_security_patch_date != config.end()) {
+    if (is_boot_completed_stage && config.build_security_patch_date != "") {
         property_override("ro.build.version.security_patch",
-                build_security_patch_date->second.c_str());
+                config.build_security_patch_date.c_str());
     }
 
-    if (is_boot_completed_stage && vendor_build_security_patch_date != config.end()) {
-        property_override("ro.vendor.build.security_patch",
-                vendor_build_security_patch_date->second.c_str());
-    }
-
-    if (is_init_stage && manufacturer_name != config.end()) {
+    if (is_init_stage && config.manufacturer_name != "") {
         property_override(property_list("ro.product.", "manufacturer"),
-                manufacturer_name->second.c_str());
+                config.manufacturer_name.c_str());
     }
 
-    if (is_init_stage && product_name != config.end()) {
-        property_override(property_list("ro.product.", "name"), product_name->second.c_str());
+    if (is_init_stage && config.product_name != "") {
+        property_override(property_list("ro.product.", "name"), config.product_name.c_str());
     }
 
     if (is_init_stage) {
@@ -68,7 +55,12 @@ int main(int argc, char *argv[]) {
     }
 
     if (is_boot_completed_stage) {
+        property_override("ro.boot.flash.locked", "1");
+        property_override("ro.boot.vbmeta.device_state", "locked");
         property_override("ro.boot.verifiedbootstate", "green");
+        property_override("ro.boot.veritymode", "enforcing");
+        property_override("ro.boot.warranty_bit", "0");
+        property_override("ro.warranty_bit", "0");
     }
 
     return 0;
