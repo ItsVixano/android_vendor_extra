@@ -11,6 +11,7 @@ Usage:
  . vendor/extra/build/envsetup.sh [ARGS]
      -h/--help: Shows this screen
      -p/--apply-patches: Apply the patches inside vendor/extra/build/patches folder
+     -d/--dirty: Avoids running 'mka installclean' before building
 END
     return 0
 fi
@@ -37,9 +38,18 @@ mka_build() {
     unset JAVAC
 
     # Check is $1 is empty
-    if [ -z "$1" ]; then
+    if [[ -z "$1" || "$1" = "-d" || "$1" = "--dirty" ]]; then
         echo -e "\nPlease mention the device to build first"
-        exit 1
+        return 0
+    fi
+
+    # Default to clean build
+    if [[ "$2" = "-d" || "$2" = "--dirty" ]]; then
+        echo -e "\nWarning: Building without cleaning up $DEVICE out dir"
+        DIRTY_BUILD="no"
+    else
+        echo -e "\nWarning: Building with cleaned up $DEVICE out dir"
+        DIRTY_BUILD="yes"
     fi
 
     # Defs
@@ -49,7 +59,9 @@ mka_build() {
     # Build
     croot # Make sure we are running this on source rootdir
     lunch lineage_"$DEVICE"-"$BUILD_TYPE"
-    mka installclean
+    if [ "$DIRTY_BUILD" = "yes" ]; then
+        mka installclean
+    fi
     mka bacon -j4
 
     # Upload build + extras
