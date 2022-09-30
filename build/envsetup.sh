@@ -19,7 +19,7 @@ fi
 . build/envsetup.sh
 
 # Defs
-export VENDOR_EXTRA_PATH=$(gettop)/vendor/extra/
+export VENDOR_EXTRA_PATH=$(gettop)/vendor/extra
 export VENDOR_PATCHES_PATH="$VENDOR_EXTRA_PATH"/build/patches
 
 # Apply patches
@@ -28,6 +28,20 @@ if [[ "$1" = "-p" || "$1" = "--apply-patches" ]]; then
 fi
 
 # functions
+pull_graphene() {
+    # ToDo: Commonize this
+    local VENDOR_EXTRA_PREBUILTS="$VENDOR_EXTRA_PATH"/prebuilt/apps
+    local url_stem="https://github.com/GrapheneOS/Camera/releases/download"
+    local latest_tag=$(curl -s https://api.github.com/repos/GrapheneOS/Camera/releases/latest | jq -r '.tag_name')
+
+    if [ -f "$VENDOR_EXTRA_PREBUILTS"/GrapheneCamera/GrapheneCamera.apk ]; then
+        # Resync Graphene Camera
+        rm -rf "$VENDOR_EXTRA_PREBUILTS"/GrapheneCamera/GrapheneCamera.apk
+    fi
+
+    wget -q --show-progress ${url_stem}/${latest_tag}/Camera-${latest_tag}.apk -O ${VENDOR_EXTRA_PREBUILTS}/GrapheneCamera/GrapheneCamera.apk
+}
+
 los_ota_json() {
     if [[ "$1" = "-h" || "$1" = "--help" ]]; then
         cat <<'END'
@@ -87,6 +101,7 @@ END
 
     # Build
     croot # Make sure we are inside the source root dir
+    pull_graphene
     lunch lineage_"$DEVICE"-"$BUILD_TYPE"
     if [ "$DIRTY_BUILD" = "yes" ]; then
         mka installclean
