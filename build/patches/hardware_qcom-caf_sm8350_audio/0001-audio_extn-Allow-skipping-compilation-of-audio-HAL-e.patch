@@ -1,0 +1,32 @@
+From c273f214e939547a4a70cc0611ba046227573b25 Mon Sep 17 00:00:00 2001
+From: Bruno Martins <bgcngm@gmail.com>
+Date: Sat, 1 Feb 2020 14:45:33 +0000
+Subject: [PATCH] audio_extn: Allow skipping compilation of audio HAL
+ extensions
+
+In case a device uses a prebuilt HAL it is rather likely
+that the extensions must match it.
+
+Change-Id: I0cb05030c9c7619513810362960a2e2a3306b3aa
+---
+ hal/audio_extn/Android.mk | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/hal/audio_extn/Android.mk b/hal/audio_extn/Android.mk
+index a7f18bd..a211884 100644
+--- a/hal/audio_extn/Android.mk
++++ b/hal/audio_extn/Android.mk
+@@ -1,3 +1,5 @@
++ifneq ($(strip $(TARGET_PROVIDES_AUDIO_EXTNS)),true)
++
+ #AudioHal-primaryHal-Hal path
+ ifneq ($(BOARD_OPENSOURCE_DIR), )
+   PRIMARY_HAL_PATH := $(BOARD_OPENSOURCE_DIR)/audio-hal/primary-hal/hal
+@@ -1256,3 +1258,4 @@ endif
+ 
+ include $(BUILD_SHARED_LIBRARY)
+ endif
++endif
+-- 
+2.35.1
+
