@@ -35,7 +35,7 @@ service logcat-kernel_romboot /system/bin/logcat -b kernel -D -f /cache/bootlogs
 
 on post-fs-data
     # Cleanup boot logs
-    rm /cache/bootlogs
+    exec - system system -- /bin/rm -rf /cache/bootlogs
     mkdir /cache/bootlogs 0755 system system
     # Grab boot logs
     start logcat_romboot
