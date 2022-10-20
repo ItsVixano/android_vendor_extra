@@ -4,7 +4,29 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-service logcat_romboot /system/bin/logcat -b all -D -f /cache/bootlogs/logcat_boot.txt
+service logcat_romboot /system/bin/logcat -b all -D -f /cache/bootlogs/logcat_romboot.log
+    class main
+    user root
+    group root system
+    disabled
+    oneshot
+
+service logcat-radio_romboot /system/bin/logcat -b radio -D -f /cache/bootlogs/logcat-radio_romboot.log
+    class main
+    user root
+    group root system
+    disabled
+    oneshot
+
+service logcat-crash_romboot /system/bin/logcat -b crash -D -f /cache/bootlogs/logcat-crash_romboot.log
+    class main
+    user root
+    group root system
+    disabled
+    oneshot
+
+# Note: It only works with usersebug and eng builds
+service logcat-kernel_romboot /system/bin/logcat -b kernel -D -f /cache/bootlogs/logcat-kernel_romboot.log
     class main
     user root
     group root system
@@ -17,7 +39,13 @@ on post-fs-data
     mkdir /cache/bootlogs 0755 system system
     # Grab boot logs
     start logcat_romboot
+    start logcat-radio_romboot
+    start logcat-crash_romboot
+    start logcat-kernel_romboot
 
 on property:sys.boot_completed=1
     # Save boot logs
     stop logcat_romboot
+    stop logcat-radio_romboot
+    stop logcat-crash_romboot
+    stop logcat-kernel_romboot
