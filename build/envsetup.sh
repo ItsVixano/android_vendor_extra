@@ -77,6 +77,9 @@ END
     croot
     cd out/target/product/"$DEVICE"/ &> /dev/null
     "$VENDOR_EXTRA_PATH"/tools/los_ota_json.py
+
+    # Return to source root dir
+    croot
 }
 
 mka_build() {
