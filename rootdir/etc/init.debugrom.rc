@@ -4,48 +4,51 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-service logcat_romboot /system/bin/logcat -b all -D -f /cache/bootlogs/logcat_romboot.log
+service logcatd_romboot /system/bin/logcatd -b all -D -f /data/misc/logd/bootlogs/logcatd_romboot.log
     class main
-    user root
-    group root system
+    user logd
+    group log
     disabled
     oneshot
 
-service logcat-radio_romboot /system/bin/logcat -b radio -D -f /cache/bootlogs/logcat-radio_romboot.log
+service logcatd-radio_romboot /system/bin/logcatd -b radio -D -f /data/misc/logd/bootlogs/logcatd-radio_romboot.log
     class main
-    user root
-    group root system
+    user logd
+    group log
     disabled
     oneshot
 
-service logcat-crash_romboot /system/bin/logcat -b crash -D -f /cache/bootlogs/logcat-crash_romboot.log
+service logcatd-crash_romboot /system/bin/logcatd -b crash -D -f /data/misc/logd/bootlogs/logcatd-crash_romboot.log
     class main
-    user root
-    group root system
+    user logd
+    group log
     disabled
     oneshot
 
 # Note: It only works with usersebug and eng builds
-service logcat-kernel_romboot /system/bin/logcat -b kernel -D -f /cache/bootlogs/logcat-kernel_romboot.log
+service logcatd-kernel_romboot /system/bin/logcatd -b kernel -D -f /data/misc/logd/bootlogs/logcatd-kernel_romboot.log
     class main
-    user root
-    group root system
+    user logd
+    group log
     disabled
     oneshot
 
 on post-fs-data
     # Cleanup boot logs
-    exec - system system -- /bin/rm -rf /cache/bootlogs
-    mkdir /cache/bootlogs 0755 system system
+    mkdir /data/misc/logd/bootlogs 0750 logd log
+    rm /data/misc/logd/bootlogs/logcatd_romboot.log
+    rm /data/misc/logd/bootlogs/logcatd-radio_romboot.log
+    rm /data/misc/logd/bootlogs/logcatd-crash_romboot.log
+    rm /data/misc/logd/bootlogs/logcatd-kernel_romboot.log
     # Grab boot logs
-    start logcat_romboot
-    start logcat-radio_romboot
-    start logcat-crash_romboot
-    start logcat-kernel_romboot
+    start logcatd_romboot
+    start logcatd-radio_romboot
+    start logcatd-crash_romboot
+    start logcatd-kernel_romboot
 
 on property:sys.boot_completed=1
     # Save boot logs
-    stop logcat_romboot
-    stop logcat-radio_romboot
-    stop logcat-crash_romboot
-    stop logcat-kernel_romboot
+    stop logcatd_romboot
+    stop logcatd-radio_romboot
+    stop logcatd-crash_romboot
+    stop logcatd-kernel_romboot
