@@ -34,7 +34,3 @@ endif
 # Rootdir
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/rootdir/etc/init.debugrom.rc:$(TARGET_COPY_OUT_SYSTEM)/etc/init/init.debugrom.rc
-
-# Default ADB shell prompt
-PRODUCT_SYSTEM_DEFAULT_PROPERTIES += \
-    persist.sys.adb.shell=/system_ext/bin/bash
