@@ -3,3 +3,5 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
+
+VENDOR_EXTRA_PATH := vendor/extra
