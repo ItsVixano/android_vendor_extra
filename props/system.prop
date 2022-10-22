@@ -1,0 +1,6 @@
+#
+# system.prop for vendor/extra
+#
+
+# ADB
+persist.sys.adb.shell=/system_ext/bin/bash
