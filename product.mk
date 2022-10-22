@@ -13,10 +13,6 @@ PRODUCT_PACKAGES += \
     BromiteWebViewOverlay \
     LineageUpdaterOverlay
 
-# Apps
-PRODUCT_PACKAGES += \
-    GrapheneCamera
-
 # ih8sn
 ifneq ($(TARGET_BUILD_VARIANT), eng)
 PRODUCT_PACKAGES += \
