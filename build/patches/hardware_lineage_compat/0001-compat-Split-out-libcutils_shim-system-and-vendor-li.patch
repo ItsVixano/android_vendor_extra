@@ -23,7 +23,7 @@ index 3efe204..e497fc0 100644
 -    ],
 +cc_defaults {
 +    name: "libcutils_shim_defaults",
-+    shared_libs: ["libutils"],
++    shared_libs: ["libcutils"],
      srcs: [
          "libcutils/strdup16to8.cpp",
          "libcutils/strdup8to16.cpp",
