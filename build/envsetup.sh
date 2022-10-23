@@ -42,7 +42,7 @@ pull_prebuilts() {
         rm -rf "$VENDOR_EXTRA_EXTERNAL"/ih8sn
     fi
 
-    git clone ${ih8sn_url_stem} "$VENDOR_EXTRA_EXTERNAL"/ih8sn
+    git clone ${ih8sn_url_stem} "$VENDOR_EXTRA_EXTERNAL"/ih8sn &> /dev/null
 }
 
 los_ota_json() {
