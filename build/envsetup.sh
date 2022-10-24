@@ -83,9 +83,6 @@ END
         return 0
     fi
 
-    # Goofy ahh build env
-    unset JAVAC
-
     # Check is $1 is empty
     if [[ -z "$1" || "$1" = "-d" || "$1" = "--dirty" ]]; then
         echo -e "\nPlease mention the device to build first"
@@ -97,6 +94,7 @@ END
     BUILD_TYPE="userdebug" # ToDo: Don't hardcode it
     if [[ "$2" = "-d" || "$2" = "--dirty" ]]; then
         echo -e "\nWarning: Building without cleaning up $DEVICE out dir\n"
+        rm -rf out/target/product/"$DEVICE"/lineage-20*.zip &> /dev/null
         DIRTY_BUILD="no"
     else
         echo -e "\nWarning: Building with cleaned up $DEVICE out dir\n"
@@ -112,15 +110,14 @@ END
     if [ "$DIRTY_BUILD" = "yes" ]; then
         mka installclean
     fi
-    mka bacon -j4
+    mka bacon -j16
 
     # Upload build + extras
     cd out/target/product/"$DEVICE"/ &> /dev/null
-    cp lineage-19*.zip ~/public_html/giovanni/"$DEVICE"/ &> /dev/null
-    cp recovery.img ~/public_html/giovanni/"$DEVICE"/ &> /dev/null
-    cp boot.img ~/public_html/giovanni/"$DEVICE"/ &> /dev/null
-    cp obj/PACKAGING/target_files_intermediates/*/IMAGES/vendor_*.img ~/public_html/giovanni/"$DEVICE"/ &> /dev/null
-    cp dtbo.img ~/public_html/giovanni/"$DEVICE"/ &> /dev/null
+    for file in lineage-*.zip recovery.img boot.img obj/PACKAGING/target_files_intermediates/*/IMAGES/vendor_*.img dtbo.img; do
+        echo -e "\nUploading $file\n"
+        transfer wet $file
+    done
 
     # Output OTA JSON
     los_ota_json "$DEVICE"
