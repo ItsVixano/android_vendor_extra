@@ -8,3 +8,6 @@ VENDOR_EXTRA_PATH := vendor/extra
 
 # Props
 TARGET_SYSTEM_PROP += $(VENDOR_EXTRA_PATH)/props/system.prop
+
+# SEPolicy
+include vendor/extra/sepolicy/SEPolicy.mk
