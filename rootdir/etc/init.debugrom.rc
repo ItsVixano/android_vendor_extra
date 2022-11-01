@@ -5,38 +5,53 @@
 #
 
 service logcatd_romboot /system/bin/logcatd -b all -D -f /data/misc/logd/bootlogs/logcatd_romboot.log
-    class main
+    class late_start
     user logd
     group log
     disabled
     oneshot
 
 service logcatd-radio_romboot /system/bin/logcatd -b radio -D -f /data/misc/logd/bootlogs/logcatd-radio_romboot.log
-    class main
+    class late_start
     user logd
     group log
     disabled
     oneshot
 
 service logcatd-crash_romboot /system/bin/logcatd -b crash -D -f /data/misc/logd/bootlogs/logcatd-crash_romboot.log
-    class main
+    class late_start
     user logd
     group log
     disabled
     oneshot
 
-# Note: It only works with usersebug and eng builds
+# Note: It only works with userdebug and eng builds
 service logcatd-kernel_romboot /system/bin/logcatd -b kernel -D -f /data/misc/logd/bootlogs/logcatd-kernel_romboot.log
-    class main
+    class late_start
     user logd
     group log
     disabled
     oneshot
 
 on post-fs-data
-    # Cleanup boot logs
-    exec - system root -- /bin/rm -rf /data/misc/logd/bootlogs
+    # Create bootlogs folder, files and setup permissions "took from logtagd.rc"
     mkdir /data/misc/logd/bootlogs 0750 logd log
+    write /data/misc/logd/bootlogs/logcatd_romboot.log ""
+    write /data/misc/logd/bootlogs/logcatd-radio_romboot.log ""
+    write /data/misc/logd/bootlogs/logcatd-crash_romboot.log ""
+    write /data/misc/logd/bootlogs/logcatd-kernel_romboot.log ""
+    chown logd log /data/misc/logd/bootlogs/logcatd_romboot.log
+    chown logd log /data/misc/logd/bootlogs/logcatd-radio_romboot.log
+    chown logd log /data/misc/logd/bootlogs/logcatd-crash_romboot.log
+    chown logd log /data/misc/logd/bootlogs/logcatd-kernel_romboot.log
+    chmod 0600 /data/misc/logd/bootlogs/logcatd_romboot.log
+    chmod 0600 /data/misc/logd/bootlogs/logcatd-radio_romboot.log
+    chmod 0600 /data/misc/logd/bootlogs/logcatd-crash_romboot.log
+    chmod 0600 /data/misc/logd/bootlogs/logcatd-kernel_romboot.log
+    restorecon /data/misc/logd/bootlogs/logcatd_romboot.log
+    restorecon /data/misc/logd/bootlogs/logcatd-radio_romboot.log
+    restorecon /data/misc/logd/bootlogs/logcatd-crash_romboot.log
+    restorecon /data/misc/logd/bootlogs/logcatd-kernel_romboot.log
     # Grab boot logs
     start logcatd_romboot
     start logcatd-radio_romboot
