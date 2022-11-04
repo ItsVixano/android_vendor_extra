@@ -10,7 +10,4 @@ EXTRA_SEPOLICY_PATH := vendor/extra/sepolicy
 ifeq ($(BOARD_HAVE_QCOM_FM), true)
 BOARD_VENDOR_SEPOLICY_DIRS += \
     $(EXTRA_SEPOLICY_PATH)/fm/vendor
-
-SYSTEM_EXT_PRIVATE_SEPOLICY_DIRS += \
-    $(EXTRA_SEPOLICY_PATH)/fm/private
 endif
