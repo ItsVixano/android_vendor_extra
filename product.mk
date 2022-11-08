@@ -16,6 +16,11 @@ PRODUCT_PACKAGES += \
     BromiteWebViewOverlay \
     LineageUpdaterOverlay
 
+# aptX
+PRODUCT_COPY_FILES += \
+    $(LOCAL_PATH)/proprietary/system_ext/lib64/libaptX_encoder.so:$(TARGET_COY_OUT_SYSTEM_EXT)/lib64/libaptX_encoder.so \
+    $(LOCAL_PATH)/proprietary/system_ext/lib64/libaptXHD_encoder.so:$(TARGET_COY_OUT_SYSTEM_EXT)/lib64/libaptXHD_encoder.so
+
 # ih8sn
 ifneq ($(TARGET_BUILD_VARIANT), eng)
 PRODUCT_PACKAGES += \
