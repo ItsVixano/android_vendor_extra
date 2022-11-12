@@ -5,16 +5,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-if [[ "$1" = "-h" || "$1" = "--help" ]]; then
-    cat <<'END'
-Usage:
- . vendor/extra/build/envsetup.sh [ARG]
-     -h/--help: Shows this screen
-     -p/--apply-patches: Apply the patches inside vendor/extra/build/patches folder
-END
-    return 0
-fi
-
 # Setup android env
 . build/envsetup.sh
 
@@ -46,14 +36,6 @@ pull_prebuilts() {
 }
 
 los_ota_json() {
-    if [[ "$1" = "-h" || "$1" = "--help" ]]; then
-        cat <<'END'
-Usage:
- los_ota_json [DEVICE CODENAME]
-END
-        return 0
-    fi
-
     # Check is $1 is empty
     if [ -z "$1" ]; then
         echo -e "\nPlease mention the device codename first"
@@ -73,16 +55,6 @@ END
 }
 
 mka_build() {
-    # Call for help
-    if [[ "$1" = "-h" || "$1" = "--help" ]]; then
-        cat <<'END'
-Usage:
- mka_build [DEVICE CODENAME] [ARG]
-     -d/--dirty: Avoids running 'mka installclean' before building
-END
-        return 0
-    fi
-
     # Check is $1 is empty
     if [[ -z "$1" || "$1" = "-d" || "$1" = "--dirty" ]]; then
         echo -e "\nPlease mention the device to build first"
@@ -94,7 +66,7 @@ END
     BUILD_TYPE="userdebug" # ToDo: Don't hardcode it
     if [[ "$2" = "-d" || "$2" = "--dirty" ]]; then
         echo -e "\nWarning: Building without cleaning up $DEVICE out dir\n"
-        rm -rf out/target/product/"$DEVICE"/lineage-20*.zip &> /dev/null
+        rm -rf out/target/product/"$DEVICE"/lineage-*.zip &> /dev/null
         DIRTY_BUILD="no"
     else
         echo -e "\nWarning: Building with cleaned up $DEVICE out dir\n"
