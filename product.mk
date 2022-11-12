@@ -20,7 +20,7 @@ PRODUCT_SOONG_NAMESPACES += \
 # Overlays
 PRODUCT_PACKAGES += \
     BromiteWebViewOverlay \
-    LineageUpdaterOverlay
+    LineageUpdaterOverlay$(PRODUCT_VERSION_MAJOR)
 
 # LDAC
 PRODUCT_PACKAGES += \
