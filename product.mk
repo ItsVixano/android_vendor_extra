@@ -17,6 +17,12 @@ $(call inherit-product, vendor/extra/external/ih8sn/ih8sn.mk)
 PRODUCT_SOONG_NAMESPACES += \
     $(LOCAL_PATH)
 
+# Apps
+ifeq ($(PRODUCT_VERSION_MAJOR), 19)
+PRODUCT_PACKAGES += \
+    GrapheneCamera
+endif
+
 # Overlays
 PRODUCT_PACKAGES += \
     BromiteWebViewOverlay \

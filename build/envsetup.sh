@@ -27,9 +27,19 @@ pull_prebuilts() {
     # ih8sn vars
     local ih8sn_url_stem="https://github.com/ItsVixano/ih8sn"
 
+    # GrapheneCamera vars
+    local graph_url_stem="https://github.com/GrapheneOS/Camera/releases/download"
+    local latest_tag=$(curl -s https://api.github.com/repos/GrapheneOS/Camera/releases/latest | jq -r '.tag_name')
+
     if [ -d "$VENDOR_EXTRA_EXTERNAL"/ih8sn ]; then
         # Resync ih8sn
         rm -rf "$VENDOR_EXTRA_EXTERNAL"/ih8sn
+    fi
+
+    if [ ! -d "$ANDROID_BUILD_TOP"/packages/apps/Aperture ]; then
+        # Sync graphene camera
+        rm -rf "$VENDOR_EXTRA_PREBUILTS"/GrapheneCamera/GrapheneCamera.apk &> /dev/null
+        wget -q --show-progress ${graph_url_stem}/${latest_tag}/Camera-${latest_tag}.apk -O ${VENDOR_EXTRA_APPS}/GrapheneCamera/GrapheneCamera.apk &> /dev/null
     fi
 
     git clone ${ih8sn_url_stem} "$VENDOR_EXTRA_EXTERNAL"/ih8sn &> /dev/null
