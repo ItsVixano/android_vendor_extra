@@ -12,6 +12,11 @@ ifeq ($(TARGET_BOARD_PLATFORM), msm8953)
 TARGET_VENDOR_PROP += $(VENDOR_EXTRA_PATH)/props/go_vendor.prop
 endif
 
+# Soong
+ifeq ($(TARGET_BOARD_PLATFORM), msm8953)
+TARGET_DISABLE_POSTRENDER_CLEANUPS := true
+endif
+
 # SEPolicy
 include vendor/extra/sepolicy/SEPolicy.mk
 
