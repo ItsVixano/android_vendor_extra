@@ -5,7 +5,7 @@
 #
 
 # Inherit Android Go Makefile
-$(call inherit-product, vendor/extra/product/go.mk)
+$(call inherit-product, vendor/extra/config/go.mk)
 
 # Inherit Rootdir Makefile
 $(call inherit-product, vendor/extra/rootdir/rootdir.mk)

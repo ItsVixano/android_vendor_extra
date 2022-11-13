@@ -14,3 +14,6 @@ endif
 
 # SEPolicy
 include vendor/extra/sepolicy/SEPolicy.mk
+
+# Soong vars
+include vendor/extra/config/BoardConfigExtraSoong.mk
