@@ -18,33 +18,6 @@ if [[ "$1" = "-p" || "$1" = "--apply-patches" ]]; then
 fi
 
 # functions
-pull_prebuilts() {
-    # Vars
-    local VENDOR_EXTRA_PREBUILTS="$VENDOR_EXTRA_PATH"/prebuilt
-    local VENDOR_EXTRA_EXTERNAL="$VENDOR_EXTRA_PATH"/external
-    local VENDOR_EXTRA_APPS="$VENDOR_EXTRA_PREBUILTS"/apps
-
-    # ih8sn vars
-    local ih8sn_url_stem="https://github.com/ItsVixano/ih8sn"
-
-    # GrapheneCamera vars
-    local graph_url_stem="https://github.com/GrapheneOS/Camera/releases/download"
-    local latest_tag=$(curl -s https://api.github.com/repos/GrapheneOS/Camera/releases/latest | jq -r '.tag_name')
-
-    if [ -d "$VENDOR_EXTRA_EXTERNAL"/ih8sn ]; then
-        # Resync ih8sn
-        rm -rf "$VENDOR_EXTRA_EXTERNAL"/ih8sn
-    fi
-
-    if [ ! -d "$ANDROID_BUILD_TOP"/packages/apps/Aperture ]; then
-        # Sync graphene camera
-        rm -rf "$VENDOR_EXTRA_PREBUILTS"/GrapheneCamera/GrapheneCamera.apk &> /dev/null
-        wget -q --show-progress ${graph_url_stem}/${latest_tag}/Camera-${latest_tag}.apk -O ${VENDOR_EXTRA_APPS}/GrapheneCamera/GrapheneCamera.apk &> /dev/null
-    fi
-
-    git clone ${ih8sn_url_stem} "$VENDOR_EXTRA_EXTERNAL"/ih8sn &> /dev/null
-}
-
 los_ota_json() {
     # Check is $1 is empty
     if [ -z "$1" ]; then
@@ -87,7 +60,6 @@ mka_build() {
 
     # Build
     croot # Make sure we are inside the source root dir
-    pull_prebuilts
     lunch lineage_"$DEVICE"-"$BUILD_TYPE"
     if [ "$DIRTY_BUILD" = "yes" ]; then
         mka installclean
