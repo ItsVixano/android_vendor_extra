@@ -8,18 +8,18 @@
 
 // Target platform agnostic config modules
 soong_config_module_type {
-    name: "disable_postrender_cleanup",
+    name: "disable_postrender_cleanups",
     module_type: "cc_defaults",
     config_namespace: "lineageGlobalVars",
-    bool_variables: ["disable_postrender_cleanup"],
+    bool_variables: ["disable_postrender_cleanups"],
     properties: ["cppflags"],
 }
 
-disable_postrender_cleanup {
-    name: "disable_postrender_cleanup_defaults",
+disable_postrender_cleanups {
+    name: "disable_postrender_cleanups_defaults",
     soong_config_variables: {
-        disable_postrender_cleanup: {
-            cppflags: ["-DDISABLE_POSTRENDER_CLEANUP"],
+        disable_postrender_cleanups: {
+            cppflags: ["-DDISABLE_POSTRENDER_CLEANUPS"],
         },
     },
 }
