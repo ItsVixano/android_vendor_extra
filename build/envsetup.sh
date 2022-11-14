@@ -18,6 +18,24 @@ if [[ "$1" = "-p" || "$1" = "--apply-patches" ]]; then
 fi
 
 # functions
+upload_assets() {
+    # Check is $1 is empty
+    if [ -z "$1" ]; then
+        echo -e "\nPlease mention the device codename first"
+        return 0
+    fi
+
+    # Defs
+    DEVICE="$1"
+
+    # Upload assets
+    cd out/target/product/"$DEVICE"/ &> /dev/null
+    for file in lineage-*.zip recovery.img boot.img obj/PACKAGING/target_files_intermediates/*/IMAGES/vendor_*.img dtbo.img; do
+        echo -e "\nUploading $file\n"
+        transfer wet $file
+    done
+}
+
 los_ota_json() {
     # Check is $1 is empty
     if [ -z "$1" ]; then
@@ -67,11 +85,7 @@ mka_build() {
     mka bacon -j16
 
     # Upload build + extras
-    cd out/target/product/"$DEVICE"/ &> /dev/null
-    for file in lineage-*.zip recovery.img boot.img obj/PACKAGING/target_files_intermediates/*/IMAGES/vendor_*.img dtbo.img; do
-        echo -e "\nUploading $file\n"
-        transfer wet $file
-    done
+    upload_assets "$DEVICE"
 
     # Output OTA JSON
     los_ota_json "$DEVICE"
