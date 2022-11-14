@@ -1,0 +1,30 @@
+From f3bdc59a5cda8f8a306f5109109c2cd68e3221eb Mon Sep 17 00:00:00 2001
+From: Khalvat-M <mmba313@gmail.com>
+Date: Tue, 13 Sep 2022 11:56:41 +0430
+Subject: [PATCH 2/3] SurfaceFlinger: Don't cleanup resources from previous
+ frame on display
+
+we have this again ha ha
+
+Change-Id: I3ffe5247efdf5053a8ae5b9b43d3cdff1272a1fe
+---
+ services/surfaceflinger/SurfaceFlinger.cpp | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/services/surfaceflinger/SurfaceFlinger.cpp b/services/surfaceflinger/SurfaceFlinger.cpp
+index c57a35461f..a89f4bdf22 100644
+--- a/services/surfaceflinger/SurfaceFlinger.cpp
++++ b/services/surfaceflinger/SurfaceFlinger.cpp
+@@ -2563,7 +2563,9 @@ void SurfaceFlinger::postComposition() {
+     mTimeStats->recordDisplayEventConnectionCount(sfConnections + appConnections);
+ 
+     if (isDisplayConnected && !display->isPoweredOn()) {
++#ifndef DISABLE_POSTRENDER_CLEANUP
+         getRenderEngine().cleanupPostRender();
++#endif
+         return;
+     }
+ 
+-- 
+2.37.3
+

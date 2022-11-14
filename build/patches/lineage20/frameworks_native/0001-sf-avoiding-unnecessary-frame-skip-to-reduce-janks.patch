@@ -1,0 +1,37 @@
+From bfcbbfacda901e7f9f93ed3cf56eebe395c76a5e Mon Sep 17 00:00:00 2001
+From: binzhang <binzhang@codeaurora.org>
+Date: Fri, 17 Sep 2021 12:56:50 +0800
+Subject: [PATCH] sf: avoiding unnecessary frame skip to reduce janks.
+
+The candidate of presnet fence is switched dynamically between front/back buffer, based on current design, it will introudce in big side effect especially for app launching, app resume cases, sometimes the timestamp of the candidate fence is not signaled, but the other candidate has fence signaled already. Then previous logic is not well handled to pick up theright presnet fence candidate. Then frame is skiped.
+
+This change is to use the legacy logic to pick up fence candidate. It can avoid such abnormal frame skip behavior.
+
+Change-Id: I055942d9ae9ac6c96eba403aa4bc1979cf128ce8
+CRs-Fixed: 3035044
+Signed-off-by: DarkJoker360 <simoespo159@gmail.com>
+---
+ services/surfaceflinger/SurfaceFlinger.cpp | 7 ++-----
+ 1 file changed, 2 insertions(+), 5 deletions(-)
+
+diff --git a/services/surfaceflinger/SurfaceFlinger.cpp b/services/surfaceflinger/SurfaceFlinger.cpp
+index 47020ba618..9236d9a481 100644
+--- a/services/surfaceflinger/SurfaceFlinger.cpp
++++ b/services/surfaceflinger/SurfaceFlinger.cpp
+@@ -1962,11 +1962,8 @@ void SurfaceFlinger::setVsyncEnabled(bool enabled) {
+ }
+ 
+ SurfaceFlinger::FenceWithFenceTime SurfaceFlinger::previousFrameFence() {
+-    const auto now = systemTime();
+-    const auto vsyncPeriod = mScheduler->getDisplayStatInfo(now).vsyncPeriod;
+-    const bool expectedPresentTimeIsTheNextVsync = mExpectedPresentTime - now <= vsyncPeriod;
+-    return expectedPresentTimeIsTheNextVsync ? mPreviousPresentFences[0]
+-                                             : mPreviousPresentFences[1];
++     return mVsyncModulator->getVsyncConfig().sfOffset >= 0 ? mPreviousPresentFences[0]
++                                                           : mPreviousPresentFences[1];
+ }
+ 
+ bool SurfaceFlinger::previousFramePending(int graceTimeMs) {
+-- 
+2.37.3
+
