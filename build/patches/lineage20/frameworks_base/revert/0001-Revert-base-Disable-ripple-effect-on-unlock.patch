@@ -1,0 +1,39 @@
+From 3daaa28ab557476dd1d8763c42c2e076968710f3 Mon Sep 17 00:00:00 2001
+From: Giovanni Ricca <giovanniricca@proton.me>
+Date: Sun, 27 Nov 2022 10:51:30 +0000
+Subject: [PATCH] Revert "base: Disable ripple effect on unlock"
+
+This reverts commit 5903345e9e1a1c605554864e0a2c09c32b8d06de.
+---
+ .../android/systemui/biometrics/AuthRippleController.kt   | 8 --------
+ 1 file changed, 8 deletions(-)
+
+diff --git a/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt b/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt
+index 204fe07615f8..38fab8ffbfad 100644
+--- a/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt
++++ b/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt
+@@ -160,8 +160,6 @@ class AuthRippleController @Inject constructor(
+     }
+ 
+     private fun showUnlockedRipple() {
+-        return
+-
+         notificationShadeWindowController.setForcePluginOpen(true, this)
+         val lightRevealScrim = centralSurfaces.lightRevealScrim
+         if (statusBarStateController.isDozing || biometricUnlockController.isWakeAndUnlock) {
+@@ -181,12 +179,6 @@ class AuthRippleController @Inject constructor(
+     }
+ 
+     override fun onKeyguardFadingAwayChanged() {
+-        // reset and hide the scrim so it doesn't appears on
+-        // the next notification shade usage
+-        centralSurfaces.lightRevealScrim?.revealAmount = 1f
+-        startLightRevealScrimOnKeyguardFadingAway = false
+-        return
+-
+         if (keyguardStateController.isKeyguardFadingAway) {
+             val lightRevealScrim = centralSurfaces.lightRevealScrim
+             if (startLightRevealScrimOnKeyguardFadingAway && lightRevealScrim != null) {
+-- 
+2.34.1
+

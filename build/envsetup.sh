@@ -9,8 +9,10 @@
 . build/envsetup.sh
 
 # Defs
+export LOS_VERSION=$(grep "PRODUCT_VERSION_MAJOR" "$ANDROID_BUILD_TOP"/vendor/lineage/config/version.mk | sed 's/PRODUCT_VERSION_MAJOR = //g' | head -1)
 export VENDOR_EXTRA_PATH=$(gettop)/vendor/extra
 export VENDOR_PATCHES_PATH="$VENDOR_EXTRA_PATH"/build/patches
+export VENDOR_PATCHES_PATH_VERSION="$VENDOR_PATCHES_PATH"/lineage"$LOS_VERSION"
 
 # Apply patches
 if [[ "$1" = "-p" || "$1" = "--apply-patches" ]]; then
@@ -72,6 +74,14 @@ mka_build() {
     else
         echo -e "\nWarning: Building with cleaned up $DEVICE out dir\n"
         DIRTY_BUILD="yes"
+    fi
+
+    # Enable ripple animation on lisa
+    if [[ "$LOS_VERSION" = "20" && "$DEVICE" = "lisa" ]]; then
+        echo -e "Re-enabling ripple animation for lisa\n"
+        cd "$ANDROID_BUILD_TOP"/frameworks/base
+        git am "$VENDOR_PATCHES_PATH_VERSION"/frameworks_base/revert/0001-Revert-base-Disable-ripple-effect-on-unlock.patch
+        git am --abort &> /dev/null
     fi
 
     sleep 3
