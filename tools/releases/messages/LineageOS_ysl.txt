@@ -8,6 +8,7 @@
 - Signature spoofing enabled by default
 - SafetyNet passes out-of-the box without root
 - OTA pushed for existing users
+- Coming from LineageOS 19.1 ?? Take a look [here](https://itsvixano.gitlab.io/lineageos_flashing/update/#upgrade-181-191)
 - [Read the instructions carefully](https://guide.itsvixano.me/)
 
 ### Sha1sums
