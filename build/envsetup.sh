@@ -76,11 +76,17 @@ mka_build() {
         DIRTY_BUILD="yes"
     fi
 
-    # Enable ripple animation on lisa
     if [[ "$LOS_VERSION" = "20" && "$DEVICE" = "lisa" ]]; then
-        echo -e "Re-enabling ripple animation for lisa\n"
+        # Enable ripple animation on sm8350
+        echo -e "Re-enable ripple animation for $DEVICE\n"
         cd "$ANDROID_BUILD_TOP"/frameworks/base
-        git am "$VENDOR_PATCHES_PATH_VERSION"/frameworks_base/revert/0001-Revert-base-Disable-ripple-effect-on-unlock.patch
+        git am "$VENDOR_PATCHES_PATH_VERSION"/frameworks_base/ripple/0001-Revert-base-Disable-ripple-effect-on-unlock.patch
+        git am --abort &> /dev/null
+    else
+        # Disable ripple animation on msm8953
+        echo -e "Disable ripple animation for $DEVICE\n"
+        cd "$ANDROID_BUILD_TOP"/frameworks/base
+        git am "$VENDOR_PATCHES_PATH_VERSION"/frameworks_base/ripple/0001-base-Disable-ripple-effect-on-unlock.patch
         git am --abort &> /dev/null
     fi
 
