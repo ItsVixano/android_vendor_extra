@@ -34,8 +34,11 @@ upload_assets() {
     cd out/target/product/"$DEVICE"/ &> /dev/null
     for file in lineage-*.zip recovery.img boot.img obj/PACKAGING/target_files_intermediates/*/IMAGES/vendor_*.img dtbo.img; do
         echo -e "\nUploading $file\n"
-        transfer wet $file
+        curl -T $file https://oshi.at
     done
+
+    # Return to the root dir
+    croot
 }
 
 los_ota_json() {
@@ -76,24 +79,25 @@ mka_build() {
         DIRTY_BUILD="yes"
     fi
 
-    if [[ "$LOS_VERSION" = "20" && "$DEVICE" = "lisa" ]]; then
-        # Enable ripple animation on sm8350
-        echo -e "Re-enable ripple animation for $DEVICE\n"
+    # Conditionally disable ripple animation
+    if [[ "$LOS_VERSION" = "20" ]]; then
+        if [[ "$DEVICE" = "lisa" ]]; then
+            echo -e "Re-enable ripple animation for $DEVICE"
+            PATCH_REVERT="Revert-"
+        else
+            echo -e "Disable ripple animation for $DEVICE"
+            PATCH_REVERT=""
+        fi
         cd "$ANDROID_BUILD_TOP"/frameworks/base
-        git am "$VENDOR_PATCHES_PATH_VERSION"/frameworks_base/ripple/0001-Revert-base-Disable-ripple-effect-on-unlock.patch
+        git am "$VENDOR_PATCHES_PATH_VERSION"/frameworks_base/ripple/0001-"$PATCH_REVERT"base-Disable-ripple-effect-on-unlock.patch
         git am --abort &> /dev/null
-    else
-        # Disable ripple animation on msm8953
-        echo -e "Disable ripple animation for $DEVICE\n"
-        cd "$ANDROID_BUILD_TOP"/frameworks/base
-        git am "$VENDOR_PATCHES_PATH_VERSION"/frameworks_base/ripple/0001-base-Disable-ripple-effect-on-unlock.patch
-        git am --abort &> /dev/null
+        echo -e "\n"
     fi
 
+    croot
     sleep 3
 
     # Build
-    croot # Make sure we are inside the source root dir
     lunch lineage_"$DEVICE"-"$BUILD_TYPE"
     if [ "$DIRTY_BUILD" = "yes" ]; then
         mka installclean
