@@ -13,6 +13,9 @@ $(call inherit-product, vendor/extra/rootdir/rootdir.mk)
 # Inherit ih8sn Makefile
 $(call inherit-product, vendor/extra/external/ih8sn/ih8sn.mk)
 
+# Inherit Proprietaty Makefile
+$(call inherit-product, vendor/extra/proprietary/extra-vendor.mk)
+
 # Soong namespaces
 PRODUCT_SOONG_NAMESPACES += \
     $(LOCAL_PATH)
@@ -32,6 +35,3 @@ PRODUCT_PACKAGES += \
 PRODUCT_PACKAGES += \
     libldacBT_enc \
     libldacBT_abr
-
-# Inherit Proprietaty Makefile
-$(call inherit-product, vendor/extra/proprietary/extra-vendor.mk)
