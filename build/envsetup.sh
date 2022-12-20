@@ -102,7 +102,7 @@ mka_build() {
     if [ "$DIRTY_BUILD" = "yes" ]; then
         mka installclean
     fi
-    mka bacon -j16
+    mka bacon -j6
 
     # Upload build + extras
     upload_assets "$DEVICE"
