@@ -102,7 +102,12 @@ mka_build() {
     if [ "$DIRTY_BUILD" = "yes" ]; then
         mka installclean
     fi
-    mka bacon -j6
+
+    if [[ $(hostname) == "hp-omen" ]]; then
+         mka bacon -j8
+    else
+         mka bacon -j6
+    fi
 
     # Upload build + extras
     if [[ $(hostname) != "hp-omen" ]]; then
