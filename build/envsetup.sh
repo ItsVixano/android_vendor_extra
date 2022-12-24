@@ -105,7 +105,9 @@ mka_build() {
     mka bacon -j6
 
     # Upload build + extras
-    upload_assets "$DEVICE"
+    if [[ $(hostname) != "hp-omen" ]]; then
+        upload_assets "$DEVICE"
+    fi
 
     # Output OTA JSON
     los_ota_json "$DEVICE"
