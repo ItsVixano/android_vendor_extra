@@ -1,5 +1,5 @@
 ### Changelog
-- ...
+- Synced with latest LineageOS source changes
 
 ### Notes
 - Selinux is enforcing
