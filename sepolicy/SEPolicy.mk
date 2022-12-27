@@ -9,7 +9,7 @@ EXTRA_SEPOLICY_PATH := vendor/extra/sepolicy
 ## Vendor ##
 
 # Common
-ifeq ($(PRODUCT_VERSION_MAJOR), 20)
+ifneq (,$(filter 20, $(PRODUCT_VERSION_MAJOR)))
 BOARD_VENDOR_SEPOLICY_DIRS += \
     $(EXTRA_SEPOLICY_PATH)/vendor/common
 endif
