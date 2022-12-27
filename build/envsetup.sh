@@ -94,6 +94,11 @@ mka_build() {
         echo -e "\n"
     fi
 
+    # goofy ahh build env
+    if [[ $(hostname) == "phenix" ]]; then
+        unset JAVAC
+    fi
+
     croot
     sleep 3
 
