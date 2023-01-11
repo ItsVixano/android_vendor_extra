@@ -94,11 +94,6 @@ mka_build() {
         echo -e "\n"
     fi
 
-    # goofy ahh build env
-    if [[ $(hostname) == "phenix" ]]; then
-        unset JAVAC
-    fi
-
     croot
     sleep 3
 
@@ -108,16 +103,10 @@ mka_build() {
         mka installclean
     fi
 
-    if [[ $(hostname) == "hp-omen" ]]; then
-         mka bacon -j8
-    else
-         mka bacon -j6
-    fi
+    mka bacon -j6
 
     # Upload build + extras
-    if [[ $(hostname) != "hp-omen" ]]; then
-        upload_assets "$DEVICE"
-    fi
+    upload_assets "$DEVICE"
 
     # Output OTA JSON
     los_ota_json "$DEVICE"

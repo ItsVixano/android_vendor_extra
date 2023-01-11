@@ -6,8 +6,6 @@
 
 EXTRA_SEPOLICY_PATH := vendor/extra/sepolicy
 
-## Vendor ##
-
 # Common
 ifneq (,$(filter 20, $(PRODUCT_VERSION_MAJOR)))
 BOARD_VENDOR_SEPOLICY_DIRS += \
