@@ -20,6 +20,42 @@ if [[ "$1" = "-p" || "$1" = "--apply-patches" ]]; then
 fi
 
 # functions
+los_changelog() {
+    # Check is $1 is empty
+    if [ -z "$1" ]; then
+        echo -e "\nPlease mention the device codename first"
+        return 0
+    fi
+
+    # Defs
+    local DEVICE="$1"
+    local datetime_utc=$(cat out/target/product/"$DEVICE"/system/build.prop | grep ro.build.date.utc=)
+    local datetime=$(date -d @${datetime_utc#*=} +%Y%m%d)
+    local changelog="$VENDOR_EXTRA_PATH"/tools/releases/LineageOS_"$DEVICE"/lineage-"$LOS_VERSION"/changelog_"$datetime".txt
+
+    # Delete the changelog if it already exists
+    rm -rf ${changelog}
+
+    # Thanks to @ ArianK16a
+    # Generate changelog for 7 days
+    for i in $(seq 7);
+    do
+        after_date=`date --date="$i days ago" +%F`
+        until_date=`date --date="$(expr ${i} - 1) days ago" +%F`
+        echo "====================" >> ${changelog}
+        echo "     $until_date    " >> ${changelog}
+        echo "====================" >> ${changelog}
+        while read path; do
+            git_log=`git --git-dir ./${path}/.git log --after=$after_date --until=$until_date --format=tformat:"%h %s [%an]"`
+            if [[ ! -z "${git_log}" ]]; then
+                echo "* ${path}" >> ${changelog}
+                echo "${git_log}" >> ${changelog}
+                echo "" >> ${changelog}
+            fi
+        done < ./.repo/project.list
+    done
+}
+
 upload_assets() {
     # Check is $1 is empty
     if [ -z "$1" ]; then
@@ -28,35 +64,31 @@ upload_assets() {
     fi
 
     # Defs
-    DEVICE="$1"
+    local DEVICE="$1"
+    local datetime_utc=$(cat out/target/product/"$DEVICE"/system/build.prop | grep ro.build.date.utc=)
+    local datetime=$(date -d @${datetime_utc#*=} +%Y%m%d)
 
-    # Upload assets
+    # Upload assets on github
+    mkdir -p "$VENDOR_EXTRA_PATH"/tools/releases/assets
+    rm -rf "$VENDOR_EXTRA_PATH"/tools/releases/assets/*
     cd out/target/product/"$DEVICE"/ &> /dev/null
-    for file in lineage-*.zip recovery.img boot.img obj/PACKAGING/target_files_intermediates/*/IMAGES/vendor_*.img dtbo.img; do
-        echo -e "\nUploading $file\n"
-        curl -T $file https://oshi.at
+    for file in lineage-*.zip recovery.img boot.img obj/PACKAGING/target_files_intermediates/*/IMAGES/vendor_boot.img dtbo.img; do
+        cp ${file} "$VENDOR_EXTRA_PATH"/tools/releases/assets &> /dev/null
     done
+    cd "$VENDOR_EXTRA_PATH"/tools/releases/
+    ./releases.py "$DEVICE" "$datetime"
 
     # Return to the root dir
     croot
-}
 
-los_ota_json() {
-    # Check is $1 is empty
-    if [ -z "$1" ]; then
-        echo -e "\nPlease mention the device codename first"
-        return 0
-    fi
-
-    # Defs
-    DEVICE="$1"
+    # Generate changelog
+    los_changelog "$DEVICE"
 
     # Generate the OTA Json
-    croot
     cd out/target/product/"$DEVICE"/ &> /dev/null
-    "$VENDOR_EXTRA_PATH"/tools/los_ota_json.py
+    "$VENDOR_EXTRA_PATH"/tools/los_ota_json.py ${datetime}
 
-    # Return to source root dir
+    # Return to the root dir
     croot
 }
 
@@ -94,6 +126,11 @@ mka_build() {
         echo -e "\n"
     fi
 
+    # goofy ahh build env
+    if [[ $(hostname) == "phenix" ]]; then
+        unset JAVAC
+    fi
+
     croot
     sleep 3
 
@@ -105,11 +142,8 @@ mka_build() {
 
     mka bacon -j6
 
-    # Upload build + extras
-    upload_assets "$DEVICE"
-
-    # Output OTA JSON
-    los_ota_json "$DEVICE"
+    # Upload build + extras + ota json + changelog
+    upload_assets "$DEVICE" # ToDo: Skip if building on local
 
     echo -e "\n\nDone!"
 }

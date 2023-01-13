@@ -1,2 +1,2 @@
 PyGithub
-#dotenv # install python-dotenv instead
+python-dotenv

@@ -5,6 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+import sys
 import os
 from hashlib import md5
 from re import search, sub
@@ -40,23 +41,37 @@ url = "".join(
     ]
 )
 
-print(
-    """
-{
+# Write the ota json to every file presen
+ota_path = f"../../../../vendor/extra/tools/releases/LineageOS_{codename}/lineage-{version[:-2]}/"
+ota = f"""{{
   "response": [
-    {
-      "datetime": %s,
-      "filename": "%s",
-      "id": "%s",
+    {{
+      "datetime": "{datetime}",
+      "filename": "{filename}",
+      "id": "{id}",
       "romtype": "unofficial",
-      "size": %s,
-      "url": "%s",
-      "version": "%s"
-    }
+      "size": "{size}",
+      "url": "{url}",
+      "version": "{version}"
+    }}
   ]
-}
+}}"""
 
-Place a dummy json file named "%s.json"
-"""
-    % (datetime, filename, id, size, url, version, incremental)
+for ota_json_file in glob(os.path.join(ota_path, "*.json")):
+    ota_json = open(ota_json_file, "w")
+    ota_json.write(ota)
+    ota_json.close()
+
+# Write a dummy ota
+dummy_ota = """{
+  "response": []
+}"""
+dummy_ota_json = open(ota_path + f"{incremental}.json", "w")
+dummy_ota_json.write(dummy_ota)
+dummy_ota_json.close()
+
+# Commit everything
+os.chdir(ota_path)
+os.system(
+    f'git add . && git commit -m "LineageOS_{codename}: lineage-{version[:-2]}: {sys.argv[1]}"'
 )
