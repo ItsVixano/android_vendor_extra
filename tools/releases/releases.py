@@ -64,7 +64,7 @@ GH_LINEAGE = get_device(sys.argv[1])[2]  # LineageOS Release
 GH_NAME = f"LineageOS {GH_LINEAGE} for {get_device(sys.argv[1])[1]} ({GH_TAG})"
 GH_MESSAGE = f"""📅 Build date: `{GH_TAG}`
 
-📔 [Device Changelog](https://ItsVixano-releases/{GH_REPO}/lineage-{GH_LINEAGE[:-2]}/changelog_{GH_TAG}.txt)
+📔 [Device Changelog](https://raw.githubusercontent.com/ItsVixano-releases/{GH_REPO}/main/lineage-{GH_LINEAGE[:-2]}/changelog_{GH_TAG}.txt)
 📕 [Installation instructions](https://guide.itsvixano.me)
 
 🔗 Sha1sums"""

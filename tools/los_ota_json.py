@@ -46,11 +46,11 @@ ota_path = f"../../../../vendor/extra/tools/releases/LineageOS_{codename}/lineag
 ota = f"""{{
   "response": [
     {{
-      "datetime": "{datetime}",
+      "datetime": {datetime},
       "filename": "{filename}",
       "id": "{id}",
       "romtype": "unofficial",
-      "size": "{size}",
+      "size": {size},
       "url": "{url}",
       "version": "{version}"
     }}
