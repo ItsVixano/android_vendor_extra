@@ -72,7 +72,7 @@ upload_assets() {
     mkdir -p "$VENDOR_EXTRA_PATH"/tools/releases/assets
     rm -rf "$VENDOR_EXTRA_PATH"/tools/releases/assets/*
     cd out/target/product/"$DEVICE"/ &> /dev/null
-    for file in lineage-*.zip recovery.img boot.img obj/PACKAGING/target_files_intermediates/*/IMAGES/vendor_boot.img dtbo.img; do
+    for file in lineage-*.zip recovery.img boot.img obj/PACKAGING/target_files_intermediates/*/IMAGES/vendor_*.img dtbo.img; do
         cp ${file} "$VENDOR_EXTRA_PATH"/tools/releases/assets &> /dev/null
     done
     cd "$VENDOR_EXTRA_PATH"/tools/releases/
