@@ -6,20 +6,19 @@
 
 EXTRA_SEPOLICY_PATH := vendor/extra/sepolicy
 
-# Common
+# Common (legacy)
+ifeq ($(TARGET_BOARD_PLATFORM), msm8953)
 ifneq (,$(filter 20, $(PRODUCT_VERSION_MAJOR)))
 BOARD_VENDOR_SEPOLICY_DIRS += \
-    $(EXTRA_SEPOLICY_PATH)/vendor/common
+    $(EXTRA_SEPOLICY_PATH)/vendor/common_legacy
 endif
 
 # Fm radio
-ifeq ($(BOARD_HAVE_QCOM_FM), true)
 BOARD_VENDOR_SEPOLICY_DIRS += \
     $(EXTRA_SEPOLICY_PATH)/vendor/fm
 
 ifeq ($(PRODUCT_VERSION_MAJOR), 19)
 SYSTEM_EXT_PRIVATE_SEPOLICY_DIRS += \
     $(EXTRA_SEPOLICY_PATH)/private/fm
-endif # ($(PRODUCT_VERSION_MAJOR), 19)
-
-endif # ($(BOARD_HAVE_QCOM_FM), true)
+endif
+endif
