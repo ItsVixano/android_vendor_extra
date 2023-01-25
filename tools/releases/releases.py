@@ -37,7 +37,7 @@ def get_device(var):
     return {
         "ysl": {1: "Redmi S2/Y2", 2: "20.0", 3: "LineageOS_ysl"},
         "daisy": {1: "Mi A2 Lite", 2: "20.0", 3: "LineageOS_daisy"},
-        "lisa": {1: "Xiaomi 11 Lite 5G NE", 2: "19.1", 3: "LineageOS_lisa"},
+        "lisa": {1: "Xiaomi 11 Lite 5G NE", 2: "20.0", 3: "LineageOS_lisa"},
     }.get(var)
 
 
