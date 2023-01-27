@@ -31,9 +31,11 @@ los_changelog() {
     local DEVICE="$1"
     local datetime_utc=$(cat out/target/product/"$DEVICE"/system/build.prop | grep ro.build.date.utc=)
     local datetime=$(date -d @${datetime_utc#*=} +%Y%m%d)
-    local changelog="$VENDOR_EXTRA_PATH"/tools/releases/LineageOS_"$DEVICE"/lineage-"$LOS_VERSION"/changelog_"$datetime".txt
+    local changelog_path="$VENDOR_EXTRA_PATH"/tools/releases/LineageOS_"$DEVICE"/lineage-"$LOS_VERSION"
+    local changelog=${changelog_path}/changelog_"$datetime".txt
 
     # Delete the changelog if it already exists
+    mkdir -p ${changelog_path}
     rm -rf ${changelog}
 
     # Thanks to @ ArianK16a
