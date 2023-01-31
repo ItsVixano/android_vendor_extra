@@ -74,7 +74,7 @@ upload_assets() {
     mkdir -p "$VENDOR_EXTRA_PATH"/tools/releases/assets
     rm -rf "$VENDOR_EXTRA_PATH"/tools/releases/assets/*
     cd out/target/product/"$DEVICE"/ &> /dev/null
-    for file in lineage-*.zip recovery.img boot.img obj/PACKAGING/target_files_intermediates/*/IMAGES/vendor_*.img dtbo.img; do
+    for file in lineage-*.zip recovery.img boot.img vendor_*.img obj/PACKAGING/target_files_intermediates/*/IMAGES/vendor_*.img dtbo.img; do
         cp ${file} "$VENDOR_EXTRA_PATH"/tools/releases/assets &> /dev/null
     done
     cd "$VENDOR_EXTRA_PATH"/tools/releases/
@@ -160,6 +160,49 @@ mka_build() {
     fi
 
     mka bacon -j6
+
+    # Upload build + extras + ota json + changelog
+    upload_assets "$DEVICE" # ToDo: Skip if building on local
+
+    echo -e "\n\nDone!"
+}
+
+mka_kernel() {
+    # Check is $1 is empty
+    if [[ -z "$1" || "$1" = "-d" || "$1" = "--dirty" ]]; then
+        echo -e "\nPlease mention the device to build first"
+        return 0
+    fi
+
+    # Defs
+    DEVICE="$1"
+    BUILD_TYPE="userdebug" # ToDo: Don't hardcode it
+
+    # goofy ahh build env
+    if [[ $(hostname) == "phenix" ]]; then
+        unset JAVAC
+    fi
+
+    # Stash everything
+    cd "$ANDROID_BUILD_TOP"/vendor/extra/
+    git stash &> /dev/null
+
+    croot
+
+    # Build
+    lunch lineage_"$DEVICE"-"$BUILD_TYPE"
+    mka installclean
+
+    mka bootimage
+    if [[ "$DEVICE" = "lisa" ]]; then
+        if [[ "$LOS_VERSION" = "19" ]]; then
+            mka dlkmimage
+        else
+            mka vendor_dlkmimage
+        fi
+        mka dtboimage
+        mka vendorbootimage
+    fi
 
     # Upload build + extras + ota json + changelog
     upload_assets "$DEVICE" # ToDo: Skip if building on local
