@@ -1,7 +1,7 @@
-From d6f44c016f5154dc4b582bda0b79576629f332dc Mon Sep 17 00:00:00 2001
+From 4635d2a120020ca1d3975d3ad75431a0284a87c8 Mon Sep 17 00:00:00 2001
 From: LeddaZ <leonardoledda@gmail.com>
 Date: Fri, 29 Oct 2021 16:54:04 +0200
-Subject: [PATCH] soong: increase heap size for metalava
+Subject: [PATCH 1/4] soong: increase heap size for metalava
 
 * Fixes building on systems with < 16GB RAM
 
@@ -23,5 +23,5 @@ index 3b1f7c0..8dcc172 100644
  		FlagWithArg("-encoding ", "UTF-8").
  		FlagWithArg("-source ", javaVersion.String()).
 -- 
-2.39.0
+2.39.1
 

@@ -1,0 +1,45 @@
+From 91df22cc3c4af3f115112361bba29121639d0b3a Mon Sep 17 00:00:00 2001
+From: Edwin Moquete <edwinmmoquete@gmail.com>
+Date: Sat, 17 Dec 2022 13:01:49 +0000
+Subject: [PATCH 5/5] Revert "Launcher3: Do not attach cleanupScreenshot() to
+ frame update event"
+
+No longer needed after QPR1, and it seems to cause an occasional glitch
+when closing apps from recents.
+
+This reverts commit 4b3ac28dae8aa32c27f67ff492f002ac8b705183.
+
+Change-Id: Ife0597ce62e69808cf5b739f391e5361b6fdfdb8
+---
+ .../com/android/quickstep/AbsSwipeUpHandler.java   | 14 ++++++++------
+ 1 file changed, 8 insertions(+), 6 deletions(-)
+
+diff --git a/quickstep/src/com/android/quickstep/AbsSwipeUpHandler.java b/quickstep/src/com/android/quickstep/AbsSwipeUpHandler.java
+index 890df6234c..f3630c187b 100644
+--- a/quickstep/src/com/android/quickstep/AbsSwipeUpHandler.java
++++ b/quickstep/src/com/android/quickstep/AbsSwipeUpHandler.java
+@@ -461,13 +461,15 @@ public abstract class AbsSwipeUpHandler<T extends StatefulActivity<S>,
+                 HashMap<Integer, ThumbnailData> snapshots =
+                         mGestureState.consumeRecentsAnimationCanceledSnapshot();
+                 if (snapshots != null) {
++                    mRecentsView.switchToScreenshot(snapshots, () -> {
++                        if (mRecentsAnimationController != null) {
++                            mRecentsAnimationController.cleanupScreenshot();
++                        } else if (mDeferredCleanupRecentsAnimationController != null) {
++                            mDeferredCleanupRecentsAnimationController.cleanupScreenshot();
++                            mDeferredCleanupRecentsAnimationController = null;
++                        }
++                    });
+                     mRecentsView.onRecentsAnimationComplete();
+-                    if (mRecentsAnimationController != null) {
+-                        mRecentsAnimationController.cleanupScreenshot();
+-                    } else if (mDeferredCleanupRecentsAnimationController != null) {
+-                        mDeferredCleanupRecentsAnimationController.cleanupScreenshot();
+-                        mDeferredCleanupRecentsAnimationController = null;
+-                    }
+                 }
+             });
+ 
+-- 
+2.39.1
+

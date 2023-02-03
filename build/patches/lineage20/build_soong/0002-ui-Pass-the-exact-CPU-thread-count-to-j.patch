@@ -1,0 +1,31 @@
+From a7d5a808aa3945ab0479f9db319cdfac43072c1c Mon Sep 17 00:00:00 2001
+From: Park Ju Hyung <qkrwngud825@gmail.com>
+Date: Sat, 31 Oct 2020 19:15:24 +0900
+Subject: [PATCH 2/4] ui: Pass the exact CPU thread count to -j
+
+Once the number of jobs exceeds the total CPU thread count,
+the task scheduler starts to inflict excessive context switches,
+slowing the entire operation down.
+
+Change-Id: Iff8829f3932e3ceb5eb78151b616991187a27246
+Signed-off-by: Park Ju Hyung <qkrwngud825@gmail.com>
+---
+ ui/build/config.go | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/ui/build/config.go b/ui/build/config.go
+index e271bfc..5333b3b 100644
+--- a/ui/build/config.go
++++ b/ui/build/config.go
+@@ -240,7 +240,7 @@ func NewConfig(ctx Context, args ...string) Config {
+ 	}
+ 
+ 	// Default matching ninja
+-	ret.parallel = runtime.NumCPU() + 2
++	ret.parallel = runtime.NumCPU()
+ 	ret.keepGoing = 1
+ 
+ 	ret.totalRAM = detectTotalRAM(ctx)
+-- 
+2.39.1
+

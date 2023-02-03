@@ -1,0 +1,24 @@
+From eb22930b5c37fbef7db09d37990152723afdcc60 Mon Sep 17 00:00:00 2001
+From: kubersharma001 <kubersharma001@gmail.com>
+Date: Sat, 24 Oct 2020 20:31:06 +0200
+Subject: [PATCH 4/5] Launcher3: power-off -> screen-off
+
+Change-Id: I7ca7c2447ccac40a22adad34d717cdd177412b08
+---
+ res/values/lineage_strings.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/res/values/lineage_strings.xml b/res/values/lineage_strings.xml
+index 9c51a3cdef..be966955af 100644
+--- a/res/values/lineage_strings.xml
++++ b/res/values/lineage_strings.xml
+@@ -55,5 +55,5 @@
+ 
+     <!-- Gestures -->
+     <string name="pref_dt_gesture_title">Double tap gesture</string>
+-    <string name="pref_dt_gesture_summary">Double tap on empty space for power-off</string>
++    <string name="pref_dt_gesture_summary">Double tap on empty space for screen-off</string>
+ </resources>
+-- 
+2.39.1
+
