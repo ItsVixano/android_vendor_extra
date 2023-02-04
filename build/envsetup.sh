@@ -164,6 +164,11 @@ mka_build() {
     # Upload build + extras + ota json + changelog
     upload_assets "$DEVICE" # ToDo: Skip if building on local
 
+    # Clean out dir again for release builds
+    if [[ "$2" = "-r" || "$2" = "--release-build" ]]; then
+        mka installclean
+    fi
+
     echo -e "\n\nDone!"
 }
 
