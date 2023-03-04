@@ -11,6 +11,9 @@ from hashlib import md5
 from re import search, sub
 from glob import glob
 
+# Release build
+is_release_build = False
+
 
 def getprop(prop):
     return search(
@@ -75,3 +78,6 @@ os.chdir(ota_path)
 os.system(
     f'git add . && git commit -m "LineageOS_{codename}: lineage-{version[:-2]}: {sys.argv[1]}"'
 )
+
+if is_release_build:
+    os.system("git push github-local HEAD:main")

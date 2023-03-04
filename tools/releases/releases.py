@@ -12,6 +12,9 @@ from dotenv import load_dotenv
 from github import Github
 from time import sleep
 
+# Release build
+is_release_build = False
+
 # Pre-checks
 if len(sys.argv) < 3:
     print(
@@ -81,7 +84,7 @@ release = repo.create_git_release(
     GH_TAG,  # tag
     GH_NAME,  # name
     GH_MESSAGE,  # message
-    draft=True,  # draft
+    draft=not is_release_build,  # draft
 )  # More info here https://pygithub.readthedocs.io/en/latest/github_objects/Repository.html?highlight=create_git_release#github.Repository.Repository.create_git_release
 
 # Upload assets
@@ -89,8 +92,13 @@ print(
     "\nSleep for 3 seconds, this is required for refreshing git api in order to get the latest untagged tag avaible in the repo"
 )
 sleep(3)  # Sleep for 3 second
+if is_release_build:
+    grep_command = f"grep {GH_TAG}"
+else:
+    grep_command = "grep untagged"
+
 GH_RELEASE_TAG = os.popen(
-    f"curl -H 'Authorization: token {GH_TOKEN}' https://api.github.com/repos/{GH_OWNER}/{GH_REPO}/releases 2>&1 | grep untagged | sed 's/.*\///' | sed 's|\",||'| head -1"
+    f"curl -H 'Authorization: token {GH_TOKEN}' https://api.github.com/repos/{GH_OWNER}/{GH_REPO}/releases 2>&1 | {grep_command} | sed 's/.*\///' | sed 's|\",||'| head -1"
 ).read()
 for asset in GH_ASSETS:
     print(f"\nUploading `{asset}`")

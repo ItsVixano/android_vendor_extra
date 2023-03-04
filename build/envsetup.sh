@@ -116,18 +116,11 @@ mka_build() {
     # Conditionally push the build to the public
     if [[ "$2" = "-r" || "$2" = "--release-build" ]]; then
         echo -e "\nWarning: Push the build to the public once is done\n"
-        sed -i "s|draft=True|draft=False|g" "$ANDROID_BUILD_TOP"/vendor/extra/tools/releases/releases.py
-        sed -i "s|grep untagged|grep {GH_TAG}|g" "$ANDROID_BUILD_TOP"/vendor/extra/tools/releases/releases.py
-        if cat "$ANDROID_BUILD_TOP"/vendor/extra/tools/los_ota_json.py | grep "os.system(\"git push github-local HEAD:main\")"; then
-            echo "\n Git push patch already applied"
-        else
-            echo "os.system(\"git push github-local HEAD:main\")" >> "$ANDROID_BUILD_TOP"/vendor/extra/tools/los_ota_json.py
-        fi
+        sed -i "s|is_release_build = False|is_release_build = True|g" "$VENDOR_EXTRA_PATH"/tools/releases/releases.py
+        sed -i "s|is_release_build = False|is_release_build = True|g" "$VENDOR_EXTRA_PATH"/tools/los_ota_json.py
     else
-        # Stash everything
-        cd "$ANDROID_BUILD_TOP"/vendor/extra/
-        git stash &> /dev/null
-        cd "$ANDROID_BUILD_TOP"
+        sed -i "s|is_release_build = True|is_release_build = False|g" "$VENDOR_EXTRA_PATH"/tools/los_ota_json.py
+        sed -i "s|is_release_build = True|is_release_build = False|g" "$VENDOR_EXTRA_PATH"/tools/releases/releases.py
     fi
 
     # Conditionally disable ripple animation
