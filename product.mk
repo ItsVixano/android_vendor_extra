@@ -10,9 +10,6 @@ $(call inherit-product, vendor/extra/config/go.mk)
 # Inherit ih8sn Makefile
 $(call inherit-product, vendor/extra/external/ih8sn/ih8sn.mk)
 
-# Inherit Proprietaty Makefile
-$(call inherit-product, vendor/extra/proprietary/extra-vendor.mk)
-
 # Soong namespaces
 PRODUCT_SOONG_NAMESPACES += \
     $(LOCAL_PATH)
