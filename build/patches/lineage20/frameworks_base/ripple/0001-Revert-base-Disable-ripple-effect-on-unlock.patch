@@ -1,27 +1,27 @@
-From 3daaa28ab557476dd1d8763c42c2e076968710f3 Mon Sep 17 00:00:00 2001
+From 506b2f5229992ed125e2b9185e9a2c6b3442ca1b Mon Sep 17 00:00:00 2001
 From: Giovanni Ricca <giovanniricca@proton.me>
-Date: Sun, 27 Nov 2022 10:51:30 +0000
+Date: Mon, 20 Mar 2023 08:35:53 +0100
 Subject: [PATCH] Revert "base: Disable ripple effect on unlock"
 
-This reverts commit 5903345e9e1a1c605554864e0a2c09c32b8d06de.
+This reverts commit 61337650a0b540cb4be1e0c9b3ef4e060fde8c93.
 ---
  .../android/systemui/biometrics/AuthRippleController.kt   | 8 --------
  1 file changed, 8 deletions(-)
 
 diff --git a/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt b/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt
-index 204fe07615f8..38fab8ffbfad 100644
+index a0d7100f..d68fcd0a 100644
 --- a/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt
 +++ b/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt
-@@ -160,8 +160,6 @@ class AuthRippleController @Inject constructor(
+@@ -161,8 +161,6 @@ class AuthRippleController @Inject constructor(
      }
  
      private fun showUnlockedRipple() {
 -        return
 -
          notificationShadeWindowController.setForcePluginOpen(true, this)
-         val lightRevealScrim = centralSurfaces.lightRevealScrim
-         if (statusBarStateController.isDozing || biometricUnlockController.isWakeAndUnlock) {
-@@ -181,12 +179,6 @@ class AuthRippleController @Inject constructor(
+ 
+         // This code path is not used if the KeyguardTransitionRepository is managing the light
+@@ -187,12 +185,6 @@ class AuthRippleController @Inject constructor(
      }
  
      override fun onKeyguardFadingAwayChanged() {
@@ -31,9 +31,9 @@ index 204fe07615f8..38fab8ffbfad 100644
 -        startLightRevealScrimOnKeyguardFadingAway = false
 -        return
 -
-         if (keyguardStateController.isKeyguardFadingAway) {
-             val lightRevealScrim = centralSurfaces.lightRevealScrim
-             if (startLightRevealScrimOnKeyguardFadingAway && lightRevealScrim != null) {
+         if (featureFlags.isEnabled(Flags.LIGHT_REVEAL_MIGRATION)) {
+             return
+         }
 -- 
-2.34.1
+2.40.0
 

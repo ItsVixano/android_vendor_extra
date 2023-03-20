@@ -1,4 +1,4 @@
-From 5903345e9e1a1c605554864e0a2c09c32b8d06de Mon Sep 17 00:00:00 2001
+From 61337650a0b540cb4be1e0c9b3ef4e060fde8c93 Mon Sep 17 00:00:00 2001
 From: Rishawn <70256146+Stealth1226@users.noreply.github.com>
 Date: Mon, 10 Jan 2022 09:47:15 +0530
 Subject: [PATCH] base: Disable ripple effect on unlock
@@ -29,19 +29,19 @@ Change-Id: Icf288401b6695bc1866d379028402fb7d953f11e
  1 file changed, 8 insertions(+)
 
 diff --git a/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt b/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt
-index 38fab8ffbfad..204fe07615f8 100644
+index d68fcd0a..a0d7100f 100644
 --- a/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt
 +++ b/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt
-@@ -160,6 +160,8 @@ class AuthRippleController @Inject constructor(
+@@ -161,6 +161,8 @@ class AuthRippleController @Inject constructor(
      }
  
      private fun showUnlockedRipple() {
 +        return
 +
          notificationShadeWindowController.setForcePluginOpen(true, this)
-         val lightRevealScrim = centralSurfaces.lightRevealScrim
-         if (statusBarStateController.isDozing || biometricUnlockController.isWakeAndUnlock) {
-@@ -179,6 +181,12 @@ class AuthRippleController @Inject constructor(
+ 
+         // This code path is not used if the KeyguardTransitionRepository is managing the light
+@@ -185,6 +187,12 @@ class AuthRippleController @Inject constructor(
      }
  
      override fun onKeyguardFadingAwayChanged() {
@@ -51,9 +51,9 @@ index 38fab8ffbfad..204fe07615f8 100644
 +        startLightRevealScrimOnKeyguardFadingAway = false
 +        return
 +
-         if (keyguardStateController.isKeyguardFadingAway) {
-             val lightRevealScrim = centralSurfaces.lightRevealScrim
-             if (startLightRevealScrimOnKeyguardFadingAway && lightRevealScrim != null) {
+         if (featureFlags.isEnabled(Flags.LIGHT_REVEAL_MIGRATION)) {
+             return
+         }
 -- 
-2.34.1
+2.40.0
 
