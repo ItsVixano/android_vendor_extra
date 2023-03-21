@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Copyright (C) 2023 Giovanni Ricca
+
+     SPDX-License-Identifier: Apache-2.0
+-->
+<resources>
+    <bool name="flag_charging_ripple">false</bool>
+</resources>

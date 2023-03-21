@@ -27,7 +27,8 @@ PRODUCT_COPY_FILES += \
 # Overlays
 PRODUCT_PACKAGES += \
     BromiteWebViewOverlay \
-    LineageUpdaterOverlay$(PRODUCT_VERSION_MAJOR)
+    LineageUpdaterOverlay$(PRODUCT_VERSION_MAJOR) \
+    RippleSystemUIOverlay
 
 # LDAC
 PRODUCT_PACKAGES += \

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Copyright (C) 2023 Giovanni Ricca
+
+     SPDX-License-Identifier: Apache-2.0
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.android.systemui.ripple">
+
+    <overlay
+        android:isStatic="true"
+        android:priority="850"
+        android:requiredSystemPropertyName="ro.board.platform"
+        android:requiredSystemPropertyValue="msm8953"
+        android:targetPackage="com.android.systemui" />
+</manifest>

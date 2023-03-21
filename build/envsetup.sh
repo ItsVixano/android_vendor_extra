@@ -123,21 +123,6 @@ mka_build() {
         sed -i "s|is_release_build = True|is_release_build = False|g" "$VENDOR_EXTRA_PATH"/tools/releases/releases.py
     fi
 
-    # Conditionally disable ripple animation
-    if [[ "$LOS_VERSION" = "20" ]]; then
-        if [[ "$DEVICE" = "lisa" ]]; then
-            echo -e "Re-enable ripple animation for $DEVICE"
-            PATCH_REVERT="Revert-"
-        else
-            echo -e "Disable ripple animation for $DEVICE"
-            PATCH_REVERT=""
-        fi
-        cd "$ANDROID_BUILD_TOP"/frameworks/base
-        git am "$VENDOR_PATCHES_PATH_VERSION"/frameworks_base/ripple/0001-"$PATCH_REVERT"base-Disable-ripple-effect-on-unlock.patch
-        git am --abort &> /dev/null
-        echo -e "\n"
-    fi
-
     # goofy ahh build env
     if [[ $(hostname) == "phenix" ]]; then
         unset JAVAC
