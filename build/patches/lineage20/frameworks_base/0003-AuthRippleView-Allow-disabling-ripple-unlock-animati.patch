@@ -1,7 +1,7 @@
-From abc0aaf74690bcc4cfcc7c871e9c2d69d54c4713 Mon Sep 17 00:00:00 2001
+From ef5a6241fbb0aa731e2f15b8658b160d44312129 Mon Sep 17 00:00:00 2001
 From: jhenrique09 <jhsv09@gmail.com>
 Date: Sun, 12 Feb 2023 13:56:11 -0300
-Subject: [PATCH 3/7] AuthRippleView: Allow disabling ripple unlock animation
+Subject: [PATCH 3/8] AuthRippleView: Allow disabling ripple unlock animation
  using overlay
 
 Change-Id: Ib5a1709e05ca1a405389ce0af25e7cb68c87b6ea

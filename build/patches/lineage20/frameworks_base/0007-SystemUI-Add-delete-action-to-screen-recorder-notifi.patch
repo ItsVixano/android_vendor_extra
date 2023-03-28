@@ -1,7 +1,7 @@
-From b76b08c177c948df8b4df01b8b02384487eb2165 Mon Sep 17 00:00:00 2001
+From d5ea1bd4de184b7fd45a67880a4f26463699cf15 Mon Sep 17 00:00:00 2001
 From: Sourajit Karmakar <sourajit.karmakar@gmail.com>
 Date: Tue, 29 Dec 2020 21:50:09 +0100
-Subject: [PATCH 7/7] SystemUI: Add delete action to screen recorder
+Subject: [PATCH 7/8] SystemUI: Add delete action to screen recorder
  notification
 
 This reverts commit 6fcdb6bf9e396f89cd497ee82811dbef6179caba.
