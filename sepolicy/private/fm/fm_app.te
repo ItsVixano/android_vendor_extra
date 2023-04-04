@@ -1,2 +1,0 @@
-# Allow FM app to find mediametrics service
-allow vendor_fm_app mediametrics_service:service_manager find;
