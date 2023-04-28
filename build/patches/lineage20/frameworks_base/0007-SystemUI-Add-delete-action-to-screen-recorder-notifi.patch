@@ -1,4 +1,4 @@
-From d5ea1bd4de184b7fd45a67880a4f26463699cf15 Mon Sep 17 00:00:00 2001
+From c57406eb154d2ccf6758403bf120712f03ca76f3 Mon Sep 17 00:00:00 2001
 From: Sourajit Karmakar <sourajit.karmakar@gmail.com>
 Date: Tue, 29 Dec 2020 21:50:09 +0100
 Subject: [PATCH 7/8] SystemUI: Add delete action to screen recorder

@@ -1,4 +1,4 @@
-From ef5a6241fbb0aa731e2f15b8658b160d44312129 Mon Sep 17 00:00:00 2001
+From 8e51e7475c718263bf6977ef2299b9ddd4a5bdb8 Mon Sep 17 00:00:00 2001
 From: jhenrique09 <jhsv09@gmail.com>
 Date: Sun, 12 Feb 2023 13:56:11 -0300
 Subject: [PATCH 3/8] AuthRippleView: Allow disabling ripple unlock animation
@@ -11,13 +11,13 @@ Change-Id: Ib5a1709e05ca1a405389ce0af25e7cb68c87b6ea
  2 files changed, 16 insertions(+)
 
 diff --git a/packages/SystemUI/res/values/lineage_config.xml b/packages/SystemUI/res/values/lineage_config.xml
-index 3b61502f..424a8219 100644
+index 79904aac..2aae38ba 100644
 --- a/packages/SystemUI/res/values/lineage_config.xml
 +++ b/packages/SystemUI/res/values/lineage_config.xml
-@@ -27,4 +27,7 @@
+@@ -30,4 +30,7 @@
  
-     <!-- Doze: does the long press sensor need a proximity check? -->
-     <bool name="doze_long_press_proximity_check">false</bool>
+     <!-- Whether usage of the proximity sensor during doze is supported -->
+     <bool name="doze_proximity_sensor_supported">true</bool>
 +
 +    <!-- Unlock ripple animation -->
 +    <bool name="config_enableUnlockRippleAnimation">true</bool>

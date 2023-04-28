@@ -1,4 +1,4 @@
-From d4e4137dccd004a8a07cae95903afcd90c588768 Mon Sep 17 00:00:00 2001
+From f19b54b6477e659bc5b1bd6848282b17e8fde860 Mon Sep 17 00:00:00 2001
 From: wbs306 <wbs306@gmail.com>
 Date: Thu, 27 Oct 2022 20:58:17 +0800
 Subject: [PATCH 8/8] Camera: Expose aux camera if packagename is null

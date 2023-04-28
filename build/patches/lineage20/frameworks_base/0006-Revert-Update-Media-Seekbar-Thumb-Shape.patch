@@ -1,4 +1,4 @@
-From 21d14a2332c198557fcf9cebefe298a23cd7b286 Mon Sep 17 00:00:00 2001
+From ea7542b2745f91e6a7ba81ceb802c659597fa208 Mon Sep 17 00:00:00 2001
 From: 00day0 <therandomuser11@gmail.com>
 Date: Tue, 10 Jan 2023 19:50:47 +0000
 Subject: [PATCH 6/8] Revert "Update Media Seekbar Thumb Shape"
