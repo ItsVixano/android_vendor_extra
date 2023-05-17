@@ -12,27 +12,42 @@
 export LOS_VERSION=$(grep "PRODUCT_VERSION_MAJOR" "$ANDROID_BUILD_TOP"/vendor/lineage/config/version.mk | sed 's/PRODUCT_VERSION_MAJOR = //g' | head -1)
 export VENDOR_EXTRA_PATH=$(gettop)/vendor/extra
 export VENDOR_PATCHES_PATH="$VENDOR_EXTRA_PATH"/build/patches
-export VENDOR_PATCHES_PATH_VERSION="$VENDOR_PATCHES_PATH"/lineage"$LOS_VERSION"
+export VENDOR_PATCHES_PATH_VERSION="$VENDOR_PATCHES_PATH"/lineage-"$LOS_VERSION"
+
+# Logging defs
+LOGI() {
+    echo -e "\033[32m[INFO]: $1\033[0m"
+}
+
+LOGW() {
+    echo -e "\033[33m[WARNING]: $1\033[0m"
+}
+
+LOGE() {
+    echo -e "\033[31m[ERROR]: $1\033[0m"
+}
 
 # Apply patches
 if [[ "$1" = "-p" || "$1" = "--apply-patches" ]]; then
-    . "$VENDOR_PATCHES_PATH"/apply-patches.sh
+    LOGI "Applying Patches"
+
+    for project_name in $(cd "$VENDOR_PATCHES_PATH_VERSION"; echo */); do
+        project_path="$(tr _ / <<<$project_name)"
+
+        cd "$ANDROID_BUILD_TOP"/"$project_path"
+        git am "$VENDOR_PATCHES_PATH_VERSION"/"$project_name"/*.patch
+        git am --abort &> /dev/null
+    done
+
+    # Return to source rootdir
+    croot
 fi
 
 # functions
 los_changelog() {
-    # Check is $1 is empty
-    if [ -z "$1" ]; then
-        echo -e "\nPlease mention the device codename first"
-        return 0
-    fi
-
     # Defs
-    local DEVICE="$1"
-    local datetime_utc=$(cat out/target/product/"$DEVICE"/system/build.prop | grep ro.build.date.utc=)
-    local datetime=$(date -d @${datetime_utc#*=} +%Y%m%d)
-    local changelog_path="$VENDOR_EXTRA_PATH"/tools/releases/LineageOS_"$DEVICE"/lineage-"$LOS_VERSION"
-    local changelog=${changelog_path}/changelog_"$datetime".txt
+    local changelog_path="${VENDOR_EXTRA_PATH}"/tools/releases/LineageOS_"${DEVICE}"/lineage-"${LOS_VERSION}"
+    local changelog=${changelog_path}/changelog_${datetime}.txt
 
     # Delete the changelog if it already exists
     mkdir -p ${changelog_path}
@@ -59,32 +74,25 @@ los_changelog() {
 }
 
 upload_assets() {
-    # Check is $1 is empty
-    if [ -z "$1" ]; then
-        echo -e "\nPlease mention the device codename first"
-        return 0
-    fi
-
     # Defs
-    local DEVICE="$1"
-    local datetime_utc=$(cat out/target/product/"$DEVICE"/system/build.prop | grep ro.build.date.utc=)
-    local datetime=$(date -d @${datetime_utc#*=} +%Y%m%d)
+    datetime_utc=$(cat out/target/product/"${DEVICE}"/system/build.prop | grep ro.build.date.utc=)
+    datetime=$(date -d @${datetime_utc#*=} +%Y%m%d)
 
     # Upload assets on github
-    mkdir -p "$VENDOR_EXTRA_PATH"/tools/releases/assets
-    rm -rf "$VENDOR_EXTRA_PATH"/tools/releases/assets/*
-    cd out/target/product/"$DEVICE"/ &> /dev/null
+    mkdir -p "${VENDOR_EXTRA_PATH}"/tools/releases/assets
+    rm -rf "${VENDOR_EXTRA_PATH}"/tools/releases/assets/*
+    cd out/target/product/"${DEVICE}"/ &> /dev/null
     for file in lineage-*.zip recovery.img boot.img vendor_*.img obj/PACKAGING/target_files_intermediates/*/IMAGES/vendor_*.img dtbo.img; do
-        cp ${file} "$VENDOR_EXTRA_PATH"/tools/releases/assets &> /dev/null
+        cp ${file} "${VENDOR_EXTRA_PATH}"/tools/releases/assets &> /dev/null
     done
-    cd "$VENDOR_EXTRA_PATH"/tools/releases/
-    ./releases.py "$DEVICE" "$datetime"
+    cd "${VENDOR_EXTRA_PATH}"/tools/releases/
+    ./releases.py "${DEVICE}" "${datetime}"
 
     # Return to the root dir
     croot
 
     # Generate changelog
-    los_changelog "$DEVICE"
+    los_changelog
 
     # Generate the OTA Json
     cd out/target/product/"$DEVICE"/ &> /dev/null
@@ -95,27 +103,42 @@ upload_assets() {
 }
 
 mka_build() {
-    # Check is $1 is empty
-    if [[ -z "$1" || "$1" = "-d" || "$1" = "--dirty" ]]; then
-        echo -e "\nPlease mention the device to build first"
+    # Defs
+    DEVICE=""
+    local RELEASE_BUILD="false"
+    local DIRTY_BUILD="false"
+    local BUILD_TYPE="userdebug"
+    local LOCAL_BUILD="false"
+
+    while [ "$#" -gt 0 ]; do
+        case "${1}" in
+            --device)
+                    DEVICE="${2}"
+                    ;;
+            -r|--release-build)
+                    local RELEASE_BUILD="true"
+                    ;;
+            -d|--dirty)
+                    local DIRTY_BUILD="true"
+                    ;;
+            --build-type)
+                    local BUILD_TYPE="${2}"
+                    ;;
+            -l|--local-build)
+                    local LOCAL_BUILD="true"
+                    ;;
+        esac
+        shift
+    done
+
+    if [[ -z "${DEVICE}" ]]; then
+        LOGE "Please define --device value"
         return 0
     fi
 
-    # Defs
-    DEVICE="$1"
-    BUILD_TYPE="userdebug" # ToDo: Don't hardcode it
-    if [[ "$2" = "-d" || "$2" = "--dirty" ]]; then
-        echo -e "\nWarning: Building without cleaning up $DEVICE out dir\n"
-        rm -rf out/target/product/"$DEVICE"/lineage-*.zip &> /dev/null
-        DIRTY_BUILD="no"
-    else
-        echo -e "\nWarning: Building with cleaned up $DEVICE out dir\n"
-        DIRTY_BUILD="yes"
-    fi
-
     # Conditionally push the build to the public
-    if [[ "$2" = "-r" || "$2" = "--release-build" ]]; then
-        echo -e "\nWarning: Push the build to the public once is done\n"
+    if [[ "${RELEASE_BUILD}" = "true" ]]; then
+        LOGW "Pushing the build to the public once is done"
         sed -i "s|is_release_build = False|is_release_build = True|g" "$VENDOR_EXTRA_PATH"/tools/releases/releases.py
         sed -i "s|is_release_build = False|is_release_build = True|g" "$VENDOR_EXTRA_PATH"/tools/los_ota_json.py
     else
@@ -132,63 +155,30 @@ mka_build() {
     sleep 3
 
     # Build
-    lunch lineage_"$DEVICE"-"$BUILD_TYPE"
-    if [ "$DIRTY_BUILD" = "yes" ]; then
+    rm -rf out/target/product/"${DEVICE}"/lineage-*.zip &> /dev/null
+    lunch lineage_"${DEVICE}"-"${BUILD_TYPE}"
+    if [[ "${DIRTY_BUILD}" != "true" ]]; then
+        LOGI "Running installclean before compiling"
         mka installclean
     fi
 
     mka bacon -j6
+    result=$?
 
-    # Upload build + extras + ota json + changelog
-    upload_assets "$DEVICE" # ToDo: Skip if building on local
+    case $result in
+        0)
+            LOGI "Build completed!"
+            ;;
+        *)
+            LOGE "Build failed!"
+            return 0
+            ;;
+    esac
 
-    # Clean out dir again for release builds
-    if [[ "$2" = "-r" || "$2" = "--release-build" ]]; then
-        mka installclean
+    if [[ "${LOCAL_BUILD}" != "true" ]]; then
+        LOGI "Uploading the builds to the internet :D"
+        upload_assets
     fi
 
-    echo -e "\n\nDone!"
-}
-
-mka_kernel() {
-    # Check is $1 is empty
-    if [[ -z "$1" || "$1" = "-d" || "$1" = "--dirty" ]]; then
-        echo -e "\nPlease mention the device to build first"
-        return 0
-    fi
-
-    # Defs
-    DEVICE="$1"
-    BUILD_TYPE="userdebug" # ToDo: Don't hardcode it
-
-    # goofy ahh build env
-    if [[ $(hostname) == "phenix" ]]; then
-        unset JAVAC
-    fi
-
-    # Stash everything
-    cd "$ANDROID_BUILD_TOP"/vendor/extra/
-    git stash &> /dev/null
-
-    croot
-
-    # Build
-    lunch lineage_"$DEVICE"-"$BUILD_TYPE"
-    mka installclean
-
-    mka bootimage
-    if [[ "$DEVICE" = "lisa" ]]; then
-        if [[ "$LOS_VERSION" = "19" ]]; then
-            mka dlkmimage
-        else
-            mka vendor_dlkmimage
-        fi
-        mka dtboimage
-        mka vendorbootimage
-    fi
-
-    # Upload build + extras + ota json + changelog
-    upload_assets "$DEVICE" # ToDo: Skip if building on local
-
-    echo -e "\n\nDone!"
+    LOGI "Done!"
 }
