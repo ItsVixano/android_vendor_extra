@@ -5,37 +5,34 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-# Setup android env
-. build/envsetup.sh
-
 # Defs
-export LOS_VERSION=$(grep "PRODUCT_VERSION_MAJOR" "$ANDROID_BUILD_TOP"/vendor/lineage/config/version.mk | sed 's/PRODUCT_VERSION_MAJOR = //g' | head -1)
-export VENDOR_EXTRA_PATH=$(gettop)/vendor/extra
-export VENDOR_PATCHES_PATH="$VENDOR_EXTRA_PATH"/build/patches
-export VENDOR_PATCHES_PATH_VERSION="$VENDOR_PATCHES_PATH"/lineage-"$LOS_VERSION"
+LOS_VERSION=$(grep "PRODUCT_VERSION_MAJOR" "${ANDROID_BUILD_TOP}"/vendor/lineage/config/version.mk | sed 's/PRODUCT_VERSION_MAJOR = //g' | head -1)
+VENDOR_EXTRA_PATH=$(gettop)/vendor/extra
+VENDOR_PATCHES_PATH="${VENDOR_EXTRA_PATH}"/build/patches
+VENDOR_PATCHES_PATH_VERSION="${VENDOR_PATCHES_PATH}"/lineage-"${LOS_VERSION}"
 
 # Logging defs
 LOGI() {
-    echo -e "\033[32m[INFO]: $1\033[0m"
+    echo -e "\n\033[32m[INFO]: $1\033[0m\n"
 }
 
 LOGW() {
-    echo -e "\033[33m[WARNING]: $1\033[0m"
+    echo -e "\n\033[33m[WARNING]: $1\033[0m\n"
 }
 
 LOGE() {
-    echo -e "\033[31m[ERROR]: $1\033[0m"
+    echo -e "\n\033[31m[ERROR]: $1\033[0m\n"
 }
 
 # Apply patches
-if [[ "$1" = "-p" || "$1" = "--apply-patches" ]]; then
+if [[ "${APPLY_PATCHES}" == "true" ]]; then
     LOGI "Applying Patches"
 
-    for project_name in $(cd "$VENDOR_PATCHES_PATH_VERSION"; echo */); do
+    for project_name in $(cd "${VENDOR_PATCHES_PATH_VERSION}"; echo */); do
         project_path="$(tr _ / <<<$project_name)"
 
-        cd "$ANDROID_BUILD_TOP"/"$project_path"
-        git am "$VENDOR_PATCHES_PATH_VERSION"/"$project_name"/*.patch
+        cd "${ANDROID_BUILD_TOP}"/${project_path}
+        git am "${VENDOR_PATCHES_PATH_VERSION}"/${project_name}/*.patch
         git am --abort &> /dev/null
     done
 
@@ -48,6 +45,13 @@ los_changelog() {
     # Defs
     local changelog_path="${VENDOR_EXTRA_PATH}"/tools/releases/LineageOS_"${DEVICE}"/lineage-"${LOS_VERSION}"
     local changelog=${changelog_path}/changelog_${datetime}.txt
+    local datetime_utc=$(cat out/target/product/"${DEVICE}"/system/build.prop | grep ro.build.date.utc=)
+    local datetime=$(date -d @${datetime_utc#*=} +%Y%m%d)
+
+    if [[ -z "${DEVICE}" ]]; then
+        LOGE "Please define \${DEVICE} value"
+        return 0
+    fi
 
     # Delete the changelog if it already exists
     mkdir -p ${changelog_path}
@@ -75,8 +79,13 @@ los_changelog() {
 
 upload_assets() {
     # Defs
-    datetime_utc=$(cat out/target/product/"${DEVICE}"/system/build.prop | grep ro.build.date.utc=)
-    datetime=$(date -d @${datetime_utc#*=} +%Y%m%d)
+    local datetime_utc=$(cat out/target/product/"${DEVICE}"/system/build.prop | grep ro.build.date.utc=)
+    local datetime=$(date -d @${datetime_utc#*=} +%Y%m%d)
+
+    if [[ -z "${DEVICE}" ]]; then
+        LOGE "Please define \${DEVICE} value"
+        return 0
+    fi
 
     # Upload assets on github
     mkdir -p "${VENDOR_EXTRA_PATH}"/tools/releases/assets
@@ -86,7 +95,7 @@ upload_assets() {
         cp ${file} "${VENDOR_EXTRA_PATH}"/tools/releases/assets &> /dev/null
     done
     cd "${VENDOR_EXTRA_PATH}"/tools/releases/
-    ./releases.py "${DEVICE}" "${datetime}"
+    ./releases.py "${DEVICE}" ${datetime}
 
     # Return to the root dir
     croot
@@ -95,8 +104,8 @@ upload_assets() {
     los_changelog
 
     # Generate the OTA Json
-    cd out/target/product/"$DEVICE"/ &> /dev/null
-    "$VENDOR_EXTRA_PATH"/tools/los_ota_json.py ${datetime}
+    cd out/target/product/"${DEVICE}"/ &> /dev/null
+    "${VENDOR_EXTRA_PATH}"/tools/los_ota_json.py ${datetime}
 
     # Return to the root dir
     croot
@@ -165,7 +174,7 @@ mka_build() {
     mka bacon -j6
     result=$?
 
-    case $result in
+    case ${result} in
         0)
             LOGI "Build completed!"
             ;;
