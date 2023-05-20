@@ -6,7 +6,7 @@
 #
 
 # Defs
-LOS_VERSION=$(grep "PRODUCT_VERSION_MAJOR" "${ANDROID_BUILD_TOP}"/vendor/lineage/config/version.mk | sed 's/PRODUCT_VERSION_MAJOR = //g' | head -1)
+LOS_VERSION=$(grep "PRODUCT_VERSION_MAJOR" $(gettop)/vendor/lineage/config/version.mk | sed 's/PRODUCT_VERSION_MAJOR = //g' | head -1)
 VENDOR_EXTRA_PATH=$(gettop)/vendor/extra
 VENDOR_PATCHES_PATH="${VENDOR_EXTRA_PATH}"/build/patches
 VENDOR_PATCHES_PATH_VERSION="${VENDOR_PATCHES_PATH}"/lineage-"${LOS_VERSION}"
@@ -31,7 +31,7 @@ if [[ "${APPLY_PATCHES}" == "true" ]]; then
     for project_name in $(cd "${VENDOR_PATCHES_PATH_VERSION}"; echo */); do
         project_path="$(tr _ / <<<$project_name)"
 
-        cd "${ANDROID_BUILD_TOP}"/${project_path}
+        cd $(gettop)/${project_path}
         git am "${VENDOR_PATCHES_PATH_VERSION}"/${project_name}/*.patch
         git am --abort &> /dev/null
     done
@@ -100,20 +100,23 @@ upload_assets() {
     # Return to the root dir
     croot
 
-    # Generate changelog
-    los_changelog
+    if [[ "${KENREL_ONLY_BUILD}" != "true" ]]; then
+        # Generate changelog
+        los_changelog
 
-    # Generate the OTA Json
-    cd out/target/product/"${DEVICE}"/ &> /dev/null
-    "${VENDOR_EXTRA_PATH}"/tools/los_ota_json.py ${datetime}
+        # Generate the OTA Json
+        cd out/target/product/"${DEVICE}"/ &> /dev/null
+        "${VENDOR_EXTRA_PATH}"/tools/los_ota_json.py ${datetime}
 
-    # Return to the root dir
-    croot
+        # Return to the root dir
+        croot
+    fi
 }
 
 mka_build() {
     # Defs
     DEVICE=""
+    KENREL_ONLY_BUILD="false"
     local RELEASE_BUILD="false"
     local DIRTY_BUILD="false"
     local BUILD_TYPE="userdebug"
@@ -148,11 +151,11 @@ mka_build() {
     # Conditionally push the build to the public
     if [[ "${RELEASE_BUILD}" = "true" ]]; then
         LOGW "Pushing the build to the public once is done"
-        sed -i "s|is_release_build = False|is_release_build = True|g" "$VENDOR_EXTRA_PATH"/tools/releases/releases.py
-        sed -i "s|is_release_build = False|is_release_build = True|g" "$VENDOR_EXTRA_PATH"/tools/los_ota_json.py
+        sed -i "s|is_release_build = False|is_release_build = True|g" "${VENDOR_EXTRA_PATH}"/tools/releases/releases.py
+        sed -i "s|is_release_build = False|is_release_build = True|g" "${VENDOR_EXTRA_PATH}"/tools/los_ota_json.py
     else
-        sed -i "s|is_release_build = True|is_release_build = False|g" "$VENDOR_EXTRA_PATH"/tools/los_ota_json.py
-        sed -i "s|is_release_build = True|is_release_build = False|g" "$VENDOR_EXTRA_PATH"/tools/releases/releases.py
+        sed -i "s|is_release_build = True|is_release_build = False|g" "${VENDOR_EXTRA_PATH}"/tools/los_ota_json.py
+        sed -i "s|is_release_build = True|is_release_build = False|g" "${VENDOR_EXTRA_PATH}"/tools/releases/releases.py
     fi
 
     # goofy ahh build env
@@ -171,18 +174,80 @@ mka_build() {
         mka installclean
     fi
 
-    mka bacon -j6
-    result=$?
+    while ! mka bacon -j6; do
+        LOGE "bacon failed!"
+        return 0
+    done
 
-    case ${result} in
-        0)
-            LOGI "Build completed!"
-            ;;
-        *)
-            LOGE "Build failed!"
+    if [[ "${LOCAL_BUILD}" != "true" ]] || [[ "${RELEASE_BUILD}" == "true" ]]; then
+        LOGI "Uploading the builds to the internet :D"
+        upload_assets
+    fi
+
+    LOGI "Done!"
+}
+
+
+mka_kernel() {
+    # Defs
+    DEVICE=""
+    KENREL_ONLY_BUILD="true"
+    local BUILD_TYPE="userdebug"
+    local LOCAL_BUILD="false"
+
+    while [ "$#" -gt 0 ]; do
+        case "${1}" in
+            --device)
+                    DEVICE="${2}"
+                    ;;
+            -l|--local-build)
+                    local LOCAL_BUILD="true"
+                    ;;
+        esac
+        shift
+    done
+
+    if [[ -z "${DEVICE}" ]]; then
+        LOGE "Please define --device value"
+        return 0
+    fi
+
+    # Don't push the kernel files to the public
+    sed -i "s|is_release_build = True|is_release_build = False|g" "${VENDOR_EXTRA_PATH}"/tools/los_ota_json.py
+    sed -i "s|is_release_build = True|is_release_build = False|g" "${VENDOR_EXTRA_PATH}"/tools/releases/releases.py
+
+    # goofy ahh build env
+    if [[ $(hostname) == "phenix" ]]; then
+        unset JAVAC
+    fi
+
+    croot
+    #sleep 3
+
+    # Build
+    LOGI "Running installclean before compiling"
+    mka installclean
+
+    kernel_targets=bootimage
+
+    if [[ "${DEVICE}" == "lisa" ]]; then
+        if [[ "${LOS_VERSION}" == "19" ]]; then
+            kernel_targets+=" dlkmimage"
+        else
+            kernel_targets+=" vendor_dlkmimage"
+        fi
+        kernel_targets+=" dtboimage"
+        kernel_targets+=" vendorbootimage"
+    fi
+
+    for kernel_target in $kernel_targets;
+    do
+        while ! mka ${kernel_target}; do
+            LOGE "${kernel_target} failed!"
             return 0
-            ;;
-    esac
+            break
+        done
+    done
 
     if [[ "${LOCAL_BUILD}" != "true" ]]; then
         LOGI "Uploading the builds to the internet :D"
