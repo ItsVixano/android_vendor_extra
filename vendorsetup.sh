@@ -100,7 +100,7 @@ upload_assets() {
     # Return to the root dir
     croot
 
-    if [[ "${KENREL_ONLY_BUILD}" != "true" ]]; then
+    if [[ "${RELEASE_BUILD}" == "true" ]]; then
         # Generate changelog
         los_changelog
 
@@ -117,7 +117,7 @@ mka_build() {
     # Defs
     DEVICE=""
     KENREL_ONLY_BUILD="false"
-    local RELEASE_BUILD="false"
+    RELEASE_BUILD="false"
     local DIRTY_BUILD="false"
     local BUILD_TYPE="userdebug"
     local LOCAL_BUILD="false"
@@ -128,7 +128,7 @@ mka_build() {
                     DEVICE="${2}"
                     ;;
             -r|--release-build)
-                    local RELEASE_BUILD="true"
+                    RELEASE_BUILD="true"
                     ;;
             -d|--dirty)
                     local DIRTY_BUILD="true"
