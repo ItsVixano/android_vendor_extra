@@ -163,9 +163,6 @@ mka_build() {
         unset JAVAC
     fi
 
-    croot
-    sleep 3
-
     # Build
     rm -rf out/target/product/"${DEVICE}"/lineage-*.zip &> /dev/null
     lunch lineage_"${DEVICE}"-"${BUILD_TYPE}"
@@ -221,14 +218,12 @@ mka_kernel() {
         unset JAVAC
     fi
 
-    croot
-    #sleep 3
-
     # Build
+    lunch lineage_"${DEVICE}"-"${BUILD_TYPE}"
     LOGI "Running installclean before compiling"
     mka installclean
 
-    kernel_targets=bootimage
+    kernel_targets="bootimage"
 
     if [[ "${DEVICE}" == "lisa" ]]; then
         if [[ "${LOS_VERSION}" == "19" ]]; then
