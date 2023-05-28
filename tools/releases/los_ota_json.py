@@ -7,6 +7,7 @@
 
 import sys
 import os
+from dotenv import load_dotenv
 from hashlib import md5
 from re import search, sub
 from glob import glob
@@ -80,4 +81,6 @@ os.system(
 )
 
 if is_release_build:
-    os.system("git push github-local HEAD:main")
+    load_dotenv()
+    GH_TOKEN = os.getenv("TOKEN")
+    os.system(f"git push https://{GH_TOKEN}@github.com/ItsVixano-releases/LineageOS_{codename}.git main")

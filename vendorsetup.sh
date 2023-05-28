@@ -110,7 +110,7 @@ upload_assets() {
 
         # Generate the OTA Json
         cd out/target/product/"${DEVICE}"/ &> /dev/null
-        "${VENDOR_EXTRA_PATH}"/tools/los_ota_json.py ${datetime}
+        "${VENDOR_EXTRA_PATH}"/tools/releases/los_ota_json.py ${datetime}
 
         # Return to the root dir
         croot
@@ -156,9 +156,9 @@ mka_build() {
     if [[ "${RELEASE_BUILD}" = "true" ]]; then
         LOGW "Pushing the build to the public once is done"
         sed -i "s|is_release_build = False|is_release_build = True|g" "${VENDOR_EXTRA_PATH}"/tools/releases/releases.py
-        sed -i "s|is_release_build = False|is_release_build = True|g" "${VENDOR_EXTRA_PATH}"/tools/los_ota_json.py
+        sed -i "s|is_release_build = False|is_release_build = True|g" "${VENDOR_EXTRA_PATH}"/tools/releases/los_ota_json.py
     else
-        sed -i "s|is_release_build = True|is_release_build = False|g" "${VENDOR_EXTRA_PATH}"/tools/los_ota_json.py
+        sed -i "s|is_release_build = True|is_release_build = False|g" "${VENDOR_EXTRA_PATH}"/tools/releases/los_ota_json.py
         sed -i "s|is_release_build = True|is_release_build = False|g" "${VENDOR_EXTRA_PATH}"/tools/releases/releases.py
     fi
 
@@ -214,7 +214,7 @@ mka_kernel() {
     fi
 
     # Don't push the kernel files to the public
-    sed -i "s|is_release_build = True|is_release_build = False|g" "${VENDOR_EXTRA_PATH}"/tools/los_ota_json.py
+    sed -i "s|is_release_build = True|is_release_build = False|g" "${VENDOR_EXTRA_PATH}"/tools/releases/los_ota_json.py
     sed -i "s|is_release_build = True|is_release_build = False|g" "${VENDOR_EXTRA_PATH}"/tools/releases/releases.py
 
     # goofy ahh build env
