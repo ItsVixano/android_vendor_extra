@@ -1,0 +1,118 @@
+From 2c4e7cfcdbf06de727811476ead1651823191a95 Mon Sep 17 00:00:00 2001
+From: nift4 <nift4@protonmail.com>
+Date: Thu, 11 May 2023 20:32:58 +0200
+Subject: [PATCH 1/7] FMRadio: use notification channels
+
+* Fixes:
+android.app.RemoteServiceException$CannotPostForegroundServiceNotificationException: Bad notification for startForeground
+
+Change-Id: Ifaa966568d1a762d853028606d6ddf56627f64eb
+---
+ res/values/cm_strings.xml                     |  4 ++++
+ src/com/android/fmradio/FmRecordActivity.java | 15 +++++++++++++--
+ src/com/android/fmradio/FmService.java        | 14 +++++++++++++-
+ 3 files changed, 30 insertions(+), 3 deletions(-)
+
+diff --git a/res/values/cm_strings.xml b/res/values/cm_strings.xml
+index 627ea98..1e1d9d4 100644
+--- a/res/values/cm_strings.xml
++++ b/res/values/cm_strings.xml
+@@ -18,4 +18,8 @@
+     <string name="notif_previous">Previous</string>
+     <string name="notif_stop">Stop</string>
+     <string name="notif_next">Next</string>
++    <string name="channel_playback_name">FM playback</string>
++    <string name="channel_playback_description">FM playback controls in notification bar</string>
++    <string name="channel_record_name">FM recorder</string>
++    <string name="channel_record_description">FM radio recorder controls in notification bar</string>
+ </resources>
+diff --git a/src/com/android/fmradio/FmRecordActivity.java b/src/com/android/fmradio/FmRecordActivity.java
+index 96da042..21b957f 100644
+--- a/src/com/android/fmradio/FmRecordActivity.java
++++ b/src/com/android/fmradio/FmRecordActivity.java
+@@ -19,7 +19,8 @@ package com.android.fmradio;
+ import android.app.Activity;
+ import android.app.FragmentManager;
+ import android.app.Notification;
+-import android.app.Notification.Builder;
++import android.app.NotificationChannel;
++import android.app.NotificationManager;
+ import android.app.PendingIntent;
+ import android.content.ComponentName;
+ import android.content.ContentResolver;
+@@ -62,6 +63,7 @@ public class FmRecordActivity extends Activity implements
+     private static final String TAG_SAVE_RECORDINGD = "SaveRecording";
+     private static final int MSG_UPDATE_NOTIFICATION = 1000;
+     private static final int TIME_BASE = 60;
++    private static final String CHANNEL_ID = "record";
+     private Context mContext;
+     private TextView mMintues;
+     private TextView mSeconds;
+@@ -173,6 +175,15 @@ public class FmRecordActivity extends Activity implements
+     }
+ 
+     private void updateRecordingNotification(long recordTime) {
++        NotificationManager notificationManager = getSystemService(NotificationManager.class);
++        if (notificationManager.getNotificationChannel(CHANNEL_ID) == null) {
++            NotificationChannel channel = new NotificationChannel(CHANNEL_ID,
++                    getString(R.string.channel_record_name), NotificationManager.IMPORTANCE_LOW);
++            channel.setDescription(getString(R.string.channel_record_description));
++            channel.setBlockable(true);
++            notificationManager.createNotificationChannel(channel);
++        }
++
+         if (mNotificationBuilder == null) {
+             Intent intent = new Intent(FM_STOP_RECORDING);
+             intent.setClass(mContext, FmRecordActivity.class);
+@@ -182,7 +193,7 @@ public class FmRecordActivity extends Activity implements
+ 
+             Bitmap largeIcon = FmUtils.createNotificationLargeIcon(mContext,
+                     FmUtils.formatStation(mCurrentStation));
+-            mNotificationBuilder = new Builder(this)
++            mNotificationBuilder = new Notification.Builder(this, CHANNEL_ID)
+                     .setContentText(getText(R.string.record_notification_message))
+                     .setShowWhen(false)
+                     .setAutoCancel(true)
+diff --git a/src/com/android/fmradio/FmService.java b/src/com/android/fmradio/FmService.java
+index 508f090..2281600 100644
+--- a/src/com/android/fmradio/FmService.java
++++ b/src/com/android/fmradio/FmService.java
+@@ -19,6 +19,8 @@ package com.android.fmradio;
+ import android.app.ActivityManager;
+ import android.app.Notification;
+ import android.app.Notification.BigTextStyle;
++import android.app.NotificationChannel;
++import android.app.NotificationManager;
+ import android.app.PendingIntent;
+ import android.app.Service;
+ import android.bluetooth.BluetoothAdapter;
+@@ -99,6 +101,7 @@ public class FmService extends Service implements FmRecorder.OnRecorderStateChan
+ 
+     // Notification id
+     private static final int NOTIFICATION_ID = 1;
++    private static final String CHANNEL_ID = "playback";
+ 
+     // ignore audio data
+     private static final int AUDIO_FRAMES_TO_IGNORE_COUNT = 3;
+@@ -1820,8 +1823,17 @@ public class FmService extends Service implements FmRecorder.OnRecorderStateChan
+         aIntent.setClassName(getPackageName(), mTargetClassName);
+         PendingIntent pAIntent = PendingIntent.getActivity(mContext, 0, aIntent, 0);
+ 
++        NotificationManager notificationManager = getSystemService(NotificationManager.class);
++        if (notificationManager.getNotificationChannel(CHANNEL_ID) == null) {
++            NotificationChannel channel = new NotificationChannel(CHANNEL_ID,
++                    getString(R.string.channel_playback_name), NotificationManager.IMPORTANCE_LOW);
++            channel.setDescription(getString(R.string.channel_playback_description));
++            channel.setBlockable(true);
++            notificationManager.createNotificationChannel(channel);
++        }
++
+         if (null == mNotificationBuilder) {
+-            mNotificationBuilder = new Notification.Builder(mContext);
++            mNotificationBuilder = new Notification.Builder(mContext, CHANNEL_ID);
+             mNotificationBuilder.setSmallIcon(R.mipmap.ic_launcher);
+             mNotificationBuilder.setShowWhen(false);
+             mNotificationBuilder.setAutoCancel(true);
+-- 
+2.40.1
+

@@ -1,0 +1,79 @@
+From c7a63c716b2d8d0a9f9912dde7390e23735288bb Mon Sep 17 00:00:00 2001
+From: iusmac <iusico.maxim@libero.it>
+Date: Sat, 17 Sep 2022 20:16:59 +0200
+Subject: [PATCH 1/2] libfmjni: Fix RDS info retrieving
+
+* now the driver communicates both the station name and the service
+  strings as expected.
+
+Signed-off-by: iusmac <iusico.maxim@libero.it>
+Change-Id: I046c36c0372f1fefa79017e7c833bd25a5e3d75a
+---
+ FM_Const.h            |  7 +++++--
+ FmRadioController.cpp | 11 +++++++----
+ 2 files changed, 12 insertions(+), 6 deletions(-)
+
+diff --git a/FM_Const.h b/FM_Const.h
+index 82d0174..9ebb515 100644
+--- a/FM_Const.h
++++ b/FM_Const.h
+@@ -95,8 +95,10 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ 
+ #define FM_RX_RDS_GRP_RT_EBL   1
+ #define FM_RX_RDS_GRP_PS_EBL   2
+-#define FM_RX_RDS_GRP_AF_EBL 4
+-#define FM_RX_RDS_GRP_PS_SIMPLE_EBL 16
++#define FM_RX_RDS_GRP_AF_EBL 8
++#define FM_RX_RDS_GRP_PS_SIMPLE_EBL 4
++#define FM_RX_RDS_GRP_ECC_EBL 32
++#define FM_RX_RDS_GRP_RT_PLUS_EBL 128
+ 
+ #define FREQ_MULT 1000
+ #define HYBRID_SRCH_DATA_LEN 3
+@@ -110,6 +112,7 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ #define AF_SIZE_IDX 6
+ #define NO_OF_BYTES_AF 4
+ #define MAX_AF_LIST_SIZE 25
++#define MASK_PI_LSB (0x000000FF)
+ 
+ typedef  unsigned int UINT;
+ typedef  unsigned long ULINT;
+diff --git a/FmRadioController.cpp b/FmRadioController.cpp
+index 9946cce..c98fcaa 100644
+--- a/FmRadioController.cpp
++++ b/FmRadioController.cpp
+@@ -796,8 +796,9 @@ int FmRadioController :: SetRdsGrpProcessing
+        if(ret != FM_SUCCESS) {
+           return ret;
+        }
+-       mask &= 0xC7;
+-       mask |= ((grps & 0x07) << 3);
++       ALOGD("%s: mask group: %d\n", __func__, grps);
++       mask = ((grps & MASK_PI_LSB));
++       ALOGD("%s: new mask group: %ld\n", __func__, mask);
+        ret = FmIoctlsInterface::set_control(fd_driver,
+                     V4L2_CID_PRV_RDSGROUP_PROC, (int)mask);
+     }else {
+@@ -826,7 +827,9 @@ int FmRadioController :: EnableRDS
+         ret = SetRdsGrpProcessing(FM_RX_RDS_GRP_RT_EBL |
+                                   FM_RX_RDS_GRP_PS_EBL |
+                                   FM_RX_RDS_GRP_AF_EBL |
+-                                  FM_RX_RDS_GRP_PS_SIMPLE_EBL);
++                                  FM_RX_RDS_GRP_PS_SIMPLE_EBL |
++                                  FM_RX_RDS_GRP_ECC_EBL |
++                                  FM_RX_RDS_GRP_RT_PLUS_EBL);
+         if (ret != FM_SUCCESS) {
+             ALOGE("Set RDS grp processing\n");
+             return ret;
+@@ -853,7 +856,7 @@ int FmRadioController :: DisableRDS
+     ALOGD("%s: cur_fm_state = %d\n", __func__, cur_fm_state);
+     if (cur_fm_state == FM_ON) {
+         ret = FmIoctlsInterface::set_control(fd_driver,
+-                      V4L2_CID_PRV_RDSON, 2);
++                      V4L2_CID_PRV_RDSON, 0);
+         if (ret != FM_SUCCESS) {
+             ALOGE("Disable RDS failed\n");
+             return ret;
+-- 
+2.40.1
+
