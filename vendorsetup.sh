@@ -230,11 +230,7 @@ mka_kernel() {
     kernel_targets="bootimage"
 
     if [[ "${DEVICE}" == "lisa" ]]; then
-        if [[ "${LOS_VERSION}" == "19" ]]; then
-            kernel_targets+=" dlkmimage"
-        else
-            kernel_targets+=" vendor_dlkmimage"
-        fi
+        kernel_targets+=" vendor_dlkmimage"
         kernel_targets+=" dtboimage"
         kernel_targets+=" vendorbootimage"
     fi

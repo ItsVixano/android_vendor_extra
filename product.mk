@@ -17,12 +17,6 @@ PRODUCT_SOONG_NAMESPACES += \
 # Boot animation
 TARGET_BOOTANIMATION_HALF_RES := true
 
-# Apps
-ifeq ($(PRODUCT_VERSION_MAJOR), 19)
-PRODUCT_PACKAGES += \
-    GrapheneCamera
-endif
-
 # Rootdir
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/rootdir/bin/neofetch:$(TARGET_COPY_OUT_SYSTEM)/bin/neofetch \
