@@ -1,0 +1,28 @@
+From 21e660085c59cbc658b97466bac3e4160a66f40d Mon Sep 17 00:00:00 2001
+From: LeddaZ <leonardoledda@gmail.com>
+Date: Thu, 18 Aug 2022 13:12:05 +0200
+Subject: [PATCH 2/6] soong: Increase Java heap size for r8
+
+* It started OOMing randomly
+
+Change-Id: I9c748849e3a05809d26afd78444438336361e2c7
+---
+ java/dex.go | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/java/dex.go b/java/dex.go
+index 84665e7b5..d21a24159 100644
+--- a/java/dex.go
++++ b/java/dex.go
+@@ -128,7 +128,7 @@ var r8, r8RE = pctx.MultiCommandRemoteStaticRules("r8",
+ 			`mkdir -p $$(dirname ${outUsage}) && ` +
+ 			`mkdir -p $$(dirname $tmpJar) && ` +
+ 			`${config.Zip2ZipCmd} -i $in -o $tmpJar -x '**/*.dex' && ` +
+-			`$r8Template${config.R8Cmd} ${config.DexFlags} -injars $tmpJar --output $outDir ` +
++			`$r8Template${config.R8Cmd} -JXmx6G ${config.DexFlags} -injars $tmpJar --output $outDir ` +
+ 			`--no-data-resources ` +
+ 			`-printmapping ${outDict} ` +
+ 			`-printusage ${outUsage} ` +
+-- 
+2.40.1
+

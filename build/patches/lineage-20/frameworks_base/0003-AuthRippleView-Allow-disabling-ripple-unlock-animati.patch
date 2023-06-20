@@ -1,14 +1,14 @@
-From 8e51e7475c718263bf6977ef2299b9ddd4a5bdb8 Mon Sep 17 00:00:00 2001
+From 22fe6895b8e96b1294c2219bd95c9d2923055585 Mon Sep 17 00:00:00 2001
 From: jhenrique09 <jhsv09@gmail.com>
 Date: Sun, 12 Feb 2023 13:56:11 -0300
-Subject: [PATCH 3/8] AuthRippleView: Allow disabling ripple unlock animation
- using overlay
+Subject: [PATCH 3/8] AuthRippleView: Allow disabling ripple unlock animation using
+ overlay
 
 Change-Id: Ib5a1709e05ca1a405389ce0af25e7cb68c87b6ea
 ---
- packages/SystemUI/res/values/lineage_config.xml     |  3 +++
- .../systemui/biometrics/AuthRippleController.kt     | 13 +++++++++++++
- 2 files changed, 16 insertions(+)
+ packages/SystemUI/res/values/lineage_config.xml |  3 +++
+ .../systemui/biometrics/AuthRippleController.kt | 17 +++++++++++++++++
+ 2 files changed, 20 insertions(+)
 
 diff --git a/packages/SystemUI/res/values/lineage_config.xml b/packages/SystemUI/res/values/lineage_config.xml
 index 79904aac..2aae38ba 100644
@@ -23,23 +23,23 @@ index 79904aac..2aae38ba 100644
 +    <bool name="config_enableUnlockRippleAnimation">true</bool>
  </resources>
 diff --git a/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt b/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt
-index d68fcd0a..daf0075a 100644
+index b3cb79e8..b7ed835a 100644
 --- a/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt
 +++ b/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt
-@@ -87,10 +87,12 @@ class AuthRippleController @Inject constructor(
+@@ -89,6 +89,12 @@ class AuthRippleController @Inject constructor(
  
      private var udfpsController: UdfpsController? = null
      private var udfpsRadius: Float = -1f
 +    private var unlockAnimationEnabled: Boolean = true
- 
-     override fun onInit() {
-         mView.setAlphaInDuration(sysuiContext.resources.getInteger(
-                 R.integer.auth_ripple_alpha_in_duration).toLong())
++
++    // Rip onInit , 995ade53e4f3d6db390c4b22918a864cbbd20883
++    override fun onInit() {
 +        unlockAnimationEnabled = sysuiContext.resources.getBoolean(R.bool.config_enableUnlockRippleAnimation)
-     }
++    }
  
      @VisibleForTesting
-@@ -161,6 +163,9 @@ class AuthRippleController @Inject constructor(
+     public override fun onViewAttached() {
+@@ -163,6 +169,9 @@ class AuthRippleController @Inject constructor(
      }
  
      private fun showUnlockedRipple() {
@@ -49,7 +49,7 @@ index d68fcd0a..daf0075a 100644
          notificationShadeWindowController.setForcePluginOpen(true, this)
  
          // This code path is not used if the KeyguardTransitionRepository is managing the light
-@@ -185,6 +190,14 @@ class AuthRippleController @Inject constructor(
+@@ -187,6 +196,14 @@ class AuthRippleController @Inject constructor(
      }
  
      override fun onKeyguardFadingAwayChanged() {
@@ -65,5 +65,5 @@ index d68fcd0a..daf0075a 100644
              return
          }
 -- 
-2.40.0
+2.40.1
 

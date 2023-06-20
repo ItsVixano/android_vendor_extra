@@ -1,7 +1,7 @@
-From 1fdd6289d11a4d014fc655e1cf79272650b2a2c5 Mon Sep 17 00:00:00 2001
+From a3b66d8867b10752a366d4b1ce0c23fc81f5e131 Mon Sep 17 00:00:00 2001
 From: Jason Edson <jaysonedson@gmail.com>
 Date: Thu, 26 Sep 2019 22:03:37 -0700
-Subject: [PATCH 3/4] cleanbuild: Remove obj/{DTB,DTBO,KERNEL}_OBJ on
+Subject: [PATCH 5/6] cleanbuild: Remove obj/{DTB,DTBO,KERNEL}_OBJ on
  installclean
 
 Change-Id: I9b505803bb6c0d604c22fa5a0ab9046b76136278
@@ -12,7 +12,7 @@ Signed-off-by: Subhajeet Muhuri <subhajeet.muhuri@aosip.dev>
  1 file changed, 3 insertions(+)
 
 diff --git a/ui/build/cleanbuild.go b/ui/build/cleanbuild.go
-index df1470a..897d0a4 100644
+index df1470a4a..897d0a4c3 100644
 --- a/ui/build/cleanbuild.go
 +++ b/ui/build/cleanbuild.go
 @@ -163,6 +163,9 @@ func installClean(ctx Context, config Config) {
@@ -26,5 +26,5 @@ index df1470a..897d0a4 100644
  		productOut("obj/PACKAGING"),
  		productOut("ramdisk"),
 -- 
-2.39.1
+2.40.1
 
