@@ -42,6 +42,7 @@ def get_device(var):
         "lisa": {1: "Xiaomi 11 Lite 5G NE", 2: "20.0", 3: "LineageOS_lisa"},
         "sakura": {1: "Redmi 6 Pro", 2: "20.0", 3: "LineageOS_sakura"},
         "ysl": {1: "Redmi S2/Y2", 2: "20.0", 3: "LineageOS_ysl"},
+        "prague": {1: "Huawei P8 Lite 2017", 2: "20.0", 3: "LineageOS_prague"},
     }.get(var)
 
 
