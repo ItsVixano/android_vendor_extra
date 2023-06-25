@@ -19,8 +19,7 @@ TARGET_BOOTANIMATION_HALF_RES := true
 
 # Rootdir
 PRODUCT_COPY_FILES += \
-    $(LOCAL_PATH)/rootdir/bin/neofetch:$(TARGET_COPY_OUT_SYSTEM)/bin/neofetch \
-    $(LOCAL_PATH)/rootdir/etc/init.debugrom.rc:$(TARGET_COPY_OUT_SYSTEM)/etc/init/init.debugrom.rc
+    $(LOCAL_PATH)/rootdir/bin/neofetch:$(TARGET_COPY_OUT_SYSTEM)/bin/neofetch
 
 # Overlays
 PRODUCT_PACKAGES += \
