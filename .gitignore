@@ -1,5 +1,6 @@
 # Ignore git patches
 *.patch
 
-# Ignore external path, these are synced separately
+# Ignore paths, these are synced separately
 external/*
+priv/

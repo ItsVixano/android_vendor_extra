@@ -40,6 +40,19 @@ if [[ "${APPLY_PATCHES}" == "true" ]]; then
         git am --abort &> /dev/null
     done
 
+    # vendor/extra/priv
+    local VENDOR_PATCHES_PATH_PRIV_VERSION="${VENDOR_EXTRA_PATH}"/priv/build/patches/lineage-"${LOS_VERSION}"
+    if [[ -d "${VENDOR_PATCHES_PATH_PRIV_VERSION}" ]]; then
+        LOGI "Applying Private Patches"
+        for project_name in $(cd "${VENDOR_PATCHES_PATH_PRIV_VERSION}"; echo */); do
+            project_path="$(tr _ / <<<$project_name)"
+
+            cd $(gettop)/${project_path}
+            git am "${VENDOR_PATCHES_PATH_PRIV_VERSION}"/${project_name}/*.patch
+            git am --abort &> /dev/null
+        done
+    fi
+
     # Return to source rootdir
     croot
 fi
