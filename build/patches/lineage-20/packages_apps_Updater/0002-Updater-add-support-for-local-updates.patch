@@ -1,7 +1,11 @@
-From 61e35829bc983605cfe761861eae72adbbc2edf5 Mon Sep 17 00:00:00 2001
+From eb85889ad9970781e7caa059eac71d0934f2a4f4 Mon Sep 17 00:00:00 2001
 From: Joey <bevilacquajoey@gmail.com>
 Date: Mon, 29 Jun 2020 16:47:26 +0200
-Subject: [PATCH] Updater: add support for local updates
+Subject: [PATCH 2/2] Updater: add support for local updates
+
+Allow importing and installation of OTA files already
+downloaded instead of requiring to reboot to recovery
+to install them.
 
 Squash of:
 - Add support for importing local updates
@@ -22,21 +26,30 @@ Squash of:
 - UpdaterService: fix crash with local install
   Change-Id: I27b187cf4adec986d516e3017d1b3877691029b2
   Signed-off-by: Alexander Martinz <amartinz@shiftphones.com>
+- Local updates: do not remove local update from ui after installation
+  Change-Id: I869e090f26273006f933ad99c42b7c6a2e963797
+  Signed-off-by: Alexander Martinz <amartinz@shiftphones.com>
+- Local updates: modify display version
+  Change-Id: I8a39e0936040bb9546499754ab4a9ef60c56aca0
+  Signed-off-by: Alexander Martinz <amartinz@shiftphones.com>
+- Local updates: show build date in import dialog
+  Change-Id: I9014358ea1cf941e76fdd80a5147e9d924fc1a8f
+  Signed-off-by: Alexander Martinz <amartinz@shiftphones.com>
 
 Change-Id: I64ca3a6af29bdf8b2c6023a502f23080a27fd79e
 Signed-off-by: Joey <joey@lineageos.org>
-Signed-off-by: Pranav Vashi <neobuddy89@gmail.com>
+Signed-off-by: Alexander Martinz <amartinz@shiftphones.com>
 ---
  res/menu/menu_toolbar.xml                     |   4 +
  res/values/strings.xml                        |   7 +
- src/org/lineageos/updater/UpdateImporter.java | 244 ++++++++++++++++++
+ src/org/lineageos/updater/UpdateImporter.java | 249 ++++++++++++++++++
  .../lineageos/updater/UpdatesActivity.java    |  83 +++++-
  .../lineageos/updater/UpdatesListAdapter.java |   9 +
  .../updater/controller/ABUpdateInstaller.java |   4 +
- .../updater/controller/UpdaterController.java |   4 +-
+ .../updater/controller/UpdaterController.java |   9 +-
  .../updater/controller/UpdaterService.java    |  10 +-
  src/org/lineageos/updater/model/Update.java   |   1 +
- 9 files changed, 360 insertions(+), 6 deletions(-)
+ 9 files changed, 368 insertions(+), 8 deletions(-)
  create mode 100644 src/org/lineageos/updater/UpdateImporter.java
 
 diff --git a/res/menu/menu_toolbar.xml b/res/menu/menu_toolbar.xml
@@ -55,7 +68,7 @@ index 8b9117c..dbca3d0 100644
          android:id="@+id/menu_preferences"
          android:title="@string/menu_preferences"
 diff --git a/res/values/strings.xml b/res/values/strings.xml
-index bfb2627..6e5872a 100644
+index 18e3ede..02dda7f 100644
 --- a/res/values/strings.xml
 +++ b/res/values/strings.xml
 @@ -157,4 +157,11 @@
@@ -72,12 +85,13 @@ index bfb2627..6e5872a 100644
  </resources>
 diff --git a/src/org/lineageos/updater/UpdateImporter.java b/src/org/lineageos/updater/UpdateImporter.java
 new file mode 100644
-index 0000000..10bd71b
+index 0000000..e2529a1
 --- /dev/null
 +++ b/src/org/lineageos/updater/UpdateImporter.java
-@@ -0,0 +1,244 @@
+@@ -0,0 +1,249 @@
 +/*
-+ * Copyright (C) 2020 Shift GmbH
++ * Copyright (C) 2017-2022 The LineageOS Project
++ * Copyright (C) 2020-2022 SHIFT GmbH
 + *
 + * Licensed under the Apache License, Version 2.0 (the "License");
 + * you may not use this file except in compliance with the License.
@@ -103,6 +117,7 @@ index 0000000..10bd71b
 +import org.json.JSONException;
 +import org.lineageos.updater.controller.UpdaterController;
 +import org.lineageos.updater.controller.UpdaterService;
++import org.lineageos.updater.misc.StringGenerator;
 +import org.lineageos.updater.misc.Utils;
 +import org.lineageos.updater.model.Update;
 +import org.lineageos.updater.model.UpdateInfo;
@@ -115,6 +130,7 @@ index 0000000..10bd71b
 +import java.io.IOException;
 +import java.io.InputStream;
 +import java.nio.charset.StandardCharsets;
++import java.text.DateFormat;
 +import java.util.Enumeration;
 +import java.util.List;
 +import java.util.zip.ZipEntry;
@@ -221,6 +237,8 @@ index 0000000..10bd71b
 +
 +    private Update buildLocalUpdate(File file) {
 +        final long timeStamp = getTimeStamp(file);
++        final String buildDate = StringGenerator.getDateLocalizedUTC(
++                activity, DateFormat.MEDIUM, timeStamp);
 +        final String name = activity.getString(R.string.local_update_name);
 +        final Update update = new Update();
 +        update.setAvailableOnline(false);
@@ -231,7 +249,7 @@ index 0000000..10bd71b
 +        update.setTimestamp(timeStamp);
 +        update.setStatus(UpdateStatus.VERIFIED);
 +        update.setPersistentStatus(UpdateStatus.Persistent.VERIFIED);
-+        update.setVersion(name);
++        update.setVersion(String.format("%s (%s)", name, buildDate));
 +        return update;
 +    }
 +
@@ -321,7 +339,7 @@ index 0000000..10bd71b
 +    }
 +}
 diff --git a/src/org/lineageos/updater/UpdatesActivity.java b/src/org/lineageos/updater/UpdatesActivity.java
-index 9c56f0b..ede1f27 100644
+index b1365cc..ad17431 100644
 --- a/src/org/lineageos/updater/UpdatesActivity.java
 +++ b/src/org/lineageos/updater/UpdatesActivity.java
 @@ -17,6 +17,7 @@ package org.lineageos.updater;
@@ -449,7 +467,7 @@ index 9c56f0b..ede1f27 100644
 +
 +        new AlertDialog.Builder(this)
 +                .setTitle(R.string.local_update_import)
-+                .setMessage(getString(R.string.local_update_import_success, update.getName()))
++                .setMessage(getString(R.string.local_update_import_success, update.getVersion()))
 +                .setPositiveButton(R.string.local_update_import_install, (dialog, which) -> {
 +                    mAdapter.addItem(update.getDownloadId());
 +                    // Update UI
@@ -477,7 +495,7 @@ index 9c56f0b..ede1f27 100644
          switch (update.getStatus()) {
              case PAUSED_ERROR:
 diff --git a/src/org/lineageos/updater/UpdatesListAdapter.java b/src/org/lineageos/updater/UpdatesListAdapter.java
-index 7cf04a8..6248182 100644
+index a107470..0c022b5 100644
 --- a/src/org/lineageos/updater/UpdatesListAdapter.java
 +++ b/src/org/lineageos/updater/UpdatesListAdapter.java
 @@ -65,6 +65,7 @@ import org.lineageos.updater.model.UpdateStatus;
@@ -488,7 +506,7 @@ index 7cf04a8..6248182 100644
  import java.util.List;
  
  public class UpdatesListAdapter extends RecyclerView.Adapter<UpdatesListAdapter.ViewHolder> {
-@@ -294,6 +295,14 @@ public class UpdatesListAdapter extends RecyclerView.Adapter<UpdatesListAdapter.
+@@ -297,6 +298,14 @@ public class UpdatesListAdapter extends RecyclerView.Adapter<UpdatesListAdapter.
          mDownloadIds = downloadIds;
      }
  
@@ -519,7 +537,7 @@ index 9fdc75e..a7ad9fa 100644
              Log.e(TAG, "The given update doesn't exist");
              mUpdaterController.getActualUpdate(downloadId)
 diff --git a/src/org/lineageos/updater/controller/UpdaterController.java b/src/org/lineageos/updater/controller/UpdaterController.java
-index 5d7d51a..41ea04d 100644
+index 5d7d51a..daa710c 100644
 --- a/src/org/lineageos/updater/controller/UpdaterController.java
 +++ b/src/org/lineageos/updater/controller/UpdaterController.java
 @@ -66,7 +66,7 @@ public class UpdaterController {
@@ -540,6 +558,25 @@ index 5d7d51a..41ea04d 100644
          Log.d(TAG, "Adding download: " + updateInfo.getDownloadId());
          if (mDownloads.containsKey(updateInfo.getDownloadId())) {
              Log.d(TAG, "Download (" + updateInfo.getDownloadId() + ") already added");
+@@ -470,7 +470,7 @@ public class UpdaterController {
+     }
+ 
+     public void deleteUpdate(String downloadId) {
+-        Log.d(TAG, "Cancelling " + downloadId);
++        Log.d(TAG, "Deleting update: " + downloadId);
+         if (!mDownloads.containsKey(downloadId) || isDownloading(downloadId)) {
+             return;
+         }
+@@ -482,7 +482,8 @@ public class UpdaterController {
+             update.setPersistentStatus(UpdateStatus.Persistent.UNKNOWN);
+             deleteUpdateAsync(update);
+ 
+-            if (!update.getAvailableOnline()) {
++            final boolean isLocalUpdate = Update.LOCAL_ID.equals(downloadId);
++            if (!isLocalUpdate && !update.getAvailableOnline()) {
+                 Log.d(TAG, "Download no longer available online, removing");
+                 mDownloads.remove(downloadId);
+                 notifyUpdateDelete(downloadId);
 diff --git a/src/org/lineageos/updater/controller/UpdaterService.java b/src/org/lineageos/updater/controller/UpdaterService.java
 index cd9334b..c279679 100644
 --- a/src/org/lineageos/updater/controller/UpdaterService.java
@@ -592,5 +629,5 @@ index ff77849..d3cb6b2 100644
      private UpdateStatus mStatus = UpdateStatus.UNKNOWN;
      private int mPersistentStatus = UpdateStatus.Persistent.UNKNOWN;
 -- 
-2.34.1
+2.40.1
 

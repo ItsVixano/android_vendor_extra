@@ -1,0 +1,78 @@
+From 4d3f57f31deebb55485bdffea6a7a83cbe0846c2 Mon Sep 17 00:00:00 2001
+From: Giovanni Ricca <giovanniricca@proton.me>
+Date: Sun, 2 Jul 2023 17:39:42 +0200
+Subject: [PATCH 1/2] Revert "Updater: 20 and up are integers!"
+
+This reverts commit 1ec0b8d1de561a398f566a898e20a01173868fea.
+---
+ src/org/lineageos/updater/UpdaterReceiver.java    | 3 +--
+ src/org/lineageos/updater/UpdatesActivity.java    | 2 +-
+ src/org/lineageos/updater/UpdatesListAdapter.java | 2 +-
+ src/org/lineageos/updater/misc/Utils.java         | 6 ------
+ 4 files changed, 3 insertions(+), 10 deletions(-)
+
+diff --git a/src/org/lineageos/updater/UpdaterReceiver.java b/src/org/lineageos/updater/UpdaterReceiver.java
+index 4b7cb7e..1fb2c5a 100644
+--- a/src/org/lineageos/updater/UpdaterReceiver.java
++++ b/src/org/lineageos/updater/UpdaterReceiver.java
+@@ -31,7 +31,6 @@ import androidx.preference.PreferenceManager;
+ import org.lineageos.updater.misc.BuildInfoUtils;
+ import org.lineageos.updater.misc.Constants;
+ import org.lineageos.updater.misc.StringGenerator;
+-import org.lineageos.updater.misc.Utils;
+ 
+ import java.text.DateFormat;
+ 
+@@ -62,7 +61,7 @@ public class UpdaterReceiver extends BroadcastReceiver {
+         String buildDate = StringGenerator.getDateLocalizedUTC(context,
+                 DateFormat.MEDIUM, preferences.getLong(Constants.PREF_INSTALL_NEW_TIMESTAMP, 0));
+         String buildInfo = context.getString(R.string.list_build_version_date,
+-                Utils.getDisplayVersion(BuildInfoUtils.getBuildVersion()), buildDate);
++                BuildInfoUtils.getBuildVersion(), buildDate);
+ 
+         Intent notificationIntent = new Intent(context, UpdatesActivity.class);
+         PendingIntent intent = PendingIntent.getActivity(context, 0, notificationIntent,
+diff --git a/src/org/lineageos/updater/UpdatesActivity.java b/src/org/lineageos/updater/UpdatesActivity.java
+index 12254c7..b1365cc 100644
+--- a/src/org/lineageos/updater/UpdatesActivity.java
++++ b/src/org/lineageos/updater/UpdatesActivity.java
+@@ -151,7 +151,7 @@ public class UpdatesActivity extends UpdatesListActivity {
+ 
+         TextView headerTitle = findViewById(R.id.header_title);
+         headerTitle.setText(getString(R.string.header_title_text,
+-                Utils.getDisplayVersion(BuildInfoUtils.getBuildVersion())));
++                BuildInfoUtils.getBuildVersion()));
+ 
+         updateLastCheckedString();
+ 
+diff --git a/src/org/lineageos/updater/UpdatesListAdapter.java b/src/org/lineageos/updater/UpdatesListAdapter.java
+index e01825d..a107470 100644
+--- a/src/org/lineageos/updater/UpdatesListAdapter.java
++++ b/src/org/lineageos/updater/UpdatesListAdapter.java
+@@ -276,7 +276,7 @@ public class UpdatesListAdapter extends RecyclerView.Adapter<UpdatesListAdapter.
+         String buildDate = StringGenerator.getDateLocalizedUTC(mActivity,
+                 DateFormat.LONG, update.getTimestamp());
+         String buildVersion = mActivity.getString(R.string.list_build_version,
+-                Utils.getDisplayVersion(update.getVersion()));
++                update.getVersion());
+         viewHolder.mBuildDate.setText(buildDate);
+         viewHolder.mBuildVersion.setText(buildVersion);
+         viewHolder.mBuildVersion.setCompoundDrawables(null, null, null, null);
+diff --git a/src/org/lineageos/updater/misc/Utils.java b/src/org/lineageos/updater/misc/Utils.java
+index f0e390a..d768f62 100644
+--- a/src/org/lineageos/updater/misc/Utils.java
++++ b/src/org/lineageos/updater/misc/Utils.java
+@@ -413,10 +413,4 @@ public class Utils {
+     public static boolean isRecoveryUpdateExecPresent() {
+         return new File(Constants.UPDATE_RECOVERY_EXEC).exists();
+     }
+-
+-    public static String getDisplayVersion(String version) {
+-        float floatVersion = Float.parseFloat(version);
+-        // Lineage 20 and up should only be integer values (we don't have minor versions anymore)
+-        return (floatVersion >= 20) ? String.valueOf((int)floatVersion) : version;
+-    }
+ }
+-- 
+2.40.1
+
