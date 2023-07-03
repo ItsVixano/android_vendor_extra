@@ -83,4 +83,4 @@ os.system(
 if is_release_build:
     load_dotenv()
     GH_TOKEN = os.getenv("TOKEN")
-    os.system(f"git push https://{GH_TOKEN}@github.com/ItsVixano-releases/LineageOS_{codename}.git main")
+    os.system(f"git push https://{GH_TOKEN}@github.com/ItsVixano-releases/LineageOS_{codename}.git HEAD:main")
