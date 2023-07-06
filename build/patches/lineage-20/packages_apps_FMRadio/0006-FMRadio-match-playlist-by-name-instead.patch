@@ -1,4 +1,4 @@
-From ebcbea80bad5304836560c49dd17397bd633e0b9 Mon Sep 17 00:00:00 2001
+From 90503ec74793ae95b14d900b857e3767a04f202e Mon Sep 17 00:00:00 2001
 From: nift4 <nift4@protonmail.com>
 Date: Fri, 12 May 2023 22:53:14 +0200
 Subject: [PATCH 6/7] FMRadio: match playlist by name instead

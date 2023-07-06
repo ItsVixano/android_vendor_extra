@@ -1,4 +1,4 @@
-From f9fbae063a0c700ec3806aa6e888e6d744ece783 Mon Sep 17 00:00:00 2001
+From 3c3164c9241ef6c8fc5b2da711f2ccd1acabd399 Mon Sep 17 00:00:00 2001
 From: nift4 <nift4@protonmail.com>
 Date: Fri, 12 May 2023 21:40:51 +0200
 Subject: [PATCH 5/7] FMRadio: fix monkey using MENU key can start record

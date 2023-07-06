@@ -1,4 +1,4 @@
-From af4b2629dc123a2be786b6e153781d62b997a380 Mon Sep 17 00:00:00 2001
+From 75946e71ae3731a08364ee8ea12a05ce891a869b Mon Sep 17 00:00:00 2001
 From: nift4 <nift4@protonmail.com>
 Date: Thu, 11 May 2023 23:21:40 +0200
 Subject: [PATCH 4/7] FMRadio: fix listen to recordings
@@ -13,9 +13,13 @@ To fix the crash, we can either:
    files (3gpp counts as video)
 2. Cleanly expose via FileProvider -> we can't, because uid=system
    cannot give out uri permissions for security reasons
-3. impersonate one of the system-whitelisted file providers (settings
+3. Not be uid=system anymore -> breaks on dirty flash/upgrade path
+   because file ownership user is still system, and also breaks existing
+   device trees that chmod /dev/fm to system
+4. impersonate one of the system-whitelisted file providers (settings
    and tvsettings) -> HACK
-4. Implement stub app which hosts the FileProvider but isn't uid=system
+5. Remove the feature -> No thanks
+6. Implement stub app which hosts the FileProvider but isn't uid=system
 
 And that's why I implemented a tiny, no-UI stub app for making listen
 possible. To avoid security holes, the stub app is gated behind
@@ -25,16 +29,16 @@ Change-Id: Ibf3f3c06967dda025d489e6612678f38b549cbcb
 ---
  Android.mk                                    |  4 +-
  AndroidManifest.xml                           |  1 +
- provider/Android.bp                           | 36 +++++++++++++
- provider/AndroidManifest.xml                  | 52 +++++++++++++++++++
- ...issions-com.android.fmradio.recordings.xml | 22 ++++++++
- provider/res/xml/provider_paths.xml           |  4 ++
- .../fmradio/recordings/PlayRecording.java     | 45 ++++++++++++++++
+ provider/Android.bp                           | 28 ++++++
+ provider/AndroidManifest.xml                  | 54 +++++++++++
+ provider/res/values/strings.xml               |  5 +
+ provider/res/xml/provider_paths.xml           |  4 +
+ .../fmradio/recordings/PlayRecording.java     | 91 +++++++++++++++++++
  src/com/android/fmradio/FmMainActivity.java   |  4 +-
- 8 files changed, 166 insertions(+), 2 deletions(-)
+ 8 files changed, 189 insertions(+), 2 deletions(-)
  create mode 100644 provider/Android.bp
  create mode 100644 provider/AndroidManifest.xml
- create mode 100644 provider/default-permissions-com.android.fmradio.recordings.xml
+ create mode 100644 provider/res/values/strings.xml
  create mode 100644 provider/res/xml/provider_paths.xml
  create mode 100644 provider/src/com/android/fmradio/recordings/PlayRecording.java
 
@@ -67,10 +71,10 @@ index 12a6f31..b161ee7 100644
          android:hardwareAccelerated="true"
 diff --git a/provider/Android.bp b/provider/Android.bp
 new file mode 100644
-index 0000000..9a3e17d
+index 0000000..da9e630
 --- /dev/null
 +++ b/provider/Android.bp
-@@ -0,0 +1,36 @@
+@@ -0,0 +1,28 @@
 +//
 +// Copyright (C) 2014 The Android Open Source Project
 +//
@@ -93,26 +97,18 @@ index 0000000..9a3e17d
 +    sdk_version: "current",
 +    srcs: ["src/**/*.java"],
 +
-+    required: ["default-permissions-com.android.fmradio.recordings.xml"],
 +    static_libs: ["androidx.core_core"],
 +
 +    optimize: {
 +        enabled: false,
 +    },
 +}
-+
-+prebuilt_etc {
-+    name: "default-permissions-com.android.fmradio.recordings.xml",
-+
-+    src: "default-permissions-com.android.fmradio.recordings.xml",
-+    relative_install_path: "default-permissions",
-+}
 diff --git a/provider/AndroidManifest.xml b/provider/AndroidManifest.xml
 new file mode 100644
-index 0000000..db2ab47
+index 0000000..1fa872f
 --- /dev/null
 +++ b/provider/AndroidManifest.xml
-@@ -0,0 +1,52 @@
+@@ -0,0 +1,54 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<!--
 +     Copyright (C) 2014 The Android Open Source Project
@@ -139,11 +135,13 @@ index 0000000..db2ab47
 +
 +    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
 +    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
++
 +    <permission
 +        android:name="com.android.fmradio.recordings.permission.PLAY_RECORDING"
 +        android:protectionLevel="signature" />
 +
 +    <application
++        android:label="@string/app_name"
 +        android:hardwareAccelerated="true">
 +
 +        <activity
@@ -165,34 +163,17 @@ index 0000000..db2ab47
 +    </application>
 +
 +</manifest>
-diff --git a/provider/default-permissions-com.android.fmradio.recordings.xml b/provider/default-permissions-com.android.fmradio.recordings.xml
+diff --git a/provider/res/values/strings.xml b/provider/res/values/strings.xml
 new file mode 100644
-index 0000000..a6a5368
+index 0000000..2083fae
 --- /dev/null
-+++ b/provider/default-permissions-com.android.fmradio.recordings.xml
-@@ -0,0 +1,22 @@
-+<?xml version="1.0" encoding="utf-8"?>
-+<!--
-+     Copyright (C) 2017-2020 The LineageOS Project
-+
-+     Licensed under the Apache License, Version 2.0 (the "License");
-+     you may not use this file except in compliance with the License.
-+     You may obtain a copy of the License at
-+
-+          http://www.apache.org/licenses/LICENSE-2.0
-+
-+     Unless required by applicable law or agreed to in writing, software
-+     distributed under the License is distributed on an "AS IS" BASIS,
-+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-+     See the License for the specific language governing permissions and
-+     limitations under the License.
-+-->
-+<exceptions>
-+    <exception package="com.android.fmradio.recordings">
-+        <permission name="android.permission.READ_MEDIA_AUDIO" fixed="true"/>
-+        <permission name="android.permission.READ_MEDIA_VIDEO" fixed="true"/>
-+    </exception>
-+</exceptions>
++++ b/provider/res/values/strings.xml
+@@ -0,0 +1,5 @@
++<resources>
++    <string name="app_name">FM recordings</string>
++    <string name="info_toast">FM recordings needs media permissions to play back recordings.</string>
++    <string name="denied_toast">FM recordings needs media permissions to play back recordings. Please grant media permissions in Settings.</string>
++</resources>
 diff --git a/provider/res/xml/provider_paths.xml b/provider/res/xml/provider_paths.xml
 new file mode 100644
 index 0000000..ff724ab
@@ -205,10 +186,10 @@ index 0000000..ff724ab
 +</paths>
 diff --git a/provider/src/com/android/fmradio/recordings/PlayRecording.java b/provider/src/com/android/fmradio/recordings/PlayRecording.java
 new file mode 100644
-index 0000000..fcf03f5
+index 0000000..e6c966e
 --- /dev/null
 +++ b/provider/src/com/android/fmradio/recordings/PlayRecording.java
-@@ -0,0 +1,45 @@
+@@ -0,0 +1,91 @@
 +/*
 + * Copyright (C) 2014 The Android Open Source Project
 + *
@@ -228,8 +209,10 @@ index 0000000..fcf03f5
 +
 +import android.app.Activity;
 +import android.content.Intent;
++import android.content.pm.PackageManager;
 +import android.net.Uri;
 +import android.os.Bundle;
++import android.widget.Toast;
 +
 +import androidx.core.content.FileProvider;
 +
@@ -237,15 +220,48 @@ index 0000000..fcf03f5
 +
 +public class PlayRecording extends Activity {
 +
++    private static final int REQUEST_CODE = 1;
++
 +    @Override
 +    public void onCreate(Bundle savedInstanceState) {
 +        super.onCreate(savedInstanceState);
-+        Intent oldIntent = getIntent();
 +
++        boolean hasPermissionAudio = checkSelfPermission(android.Manifest.permission.READ_MEDIA_AUDIO) == PackageManager.PERMISSION_GRANTED;
++        boolean hasPermissionVideo = checkSelfPermission(android.Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED;
++        boolean shouldShowRationale = false;
++        if (!hasPermissionAudio) {
++            shouldShowRationale |= shouldShowRequestPermissionRationale(android.Manifest.permission.READ_MEDIA_AUDIO);
++        }
++        if (!hasPermissionVideo) {
++            shouldShowRationale |= shouldShowRequestPermissionRationale(android.Manifest.permission.READ_MEDIA_VIDEO);
++        }
++
++        if (hasPermissionAudio && hasPermissionVideo) {
++            startPlayerNow();
++            return;
++        } else if (shouldShowRationale) {
++            Toast.makeText(this, R.string.info_toast, Toast.LENGTH_LONG).show();
++        }
++
++        requestPermissions(new String[] {
++            android.Manifest.permission.READ_MEDIA_AUDIO,
++            android.Manifest.permission.READ_MEDIA_VIDEO
++        }, REQUEST_CODE);
++    }
++
++    private void startPlayerNow() {
++        if (checkSelfPermission(android.Manifest.permission.READ_MEDIA_AUDIO) != PackageManager.PERMISSION_GRANTED ||
++                checkSelfPermission(android.Manifest.permission.READ_MEDIA_VIDEO) != PackageManager.PERMISSION_GRANTED) {
++            Toast.makeText(this, R.string.denied_toast, Toast.LENGTH_LONG).show();
++            finish();
++            return;
++        }
++
++        final Intent oldIntent = getIntent();
 +        if (oldIntent != null && oldIntent.hasExtra("type") && oldIntent.hasExtra("path")) {
 +            Intent nextIntent = new Intent(Intent.ACTION_VIEW);
 +            Uri uri = FileProvider.getUriForFile(this, getApplicationContext().getPackageName(),
-+                    new File(Uri.parse(oldIntent.getStringExtra("path")).getPath()));
++                                                 new File(Uri.parse(oldIntent.getStringExtra("path")).getPath()));
 +            nextIntent.setDataAndType(uri, oldIntent.getStringExtra("type"));
 +            nextIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
 +            startActivity(nextIntent);
@@ -253,6 +269,17 @@ index 0000000..fcf03f5
 +
 +        finish();
 +    }
++
++    @Override
++    public void onRequestPermissionsResult(int requestCode, String[] permissions,
++                                           int[] grantResults) {
++        switch (requestCode) {
++            case REQUEST_CODE:
++                // If not granted, we show toast, so just go for it whatever happens
++                startPlayerNow();
++                break;
++        }
++   }
 +}
 diff --git a/src/com/android/fmradio/FmMainActivity.java b/src/com/android/fmradio/FmMainActivity.java
 index f735283..20bf935 100644
