@@ -13,6 +13,9 @@ $(call inherit-product-if-exists, vendor/extra/priv/product.mk)
 # Boot animation
 TARGET_BOOTANIMATION_HALF_RES := true
 
+# MiuiCamera
+$(call inherit-product-if-exists, vendor/xiaomi/miuicamera-$(shell echo -n $(TARGET_PRODUCT) | sed -e 's/^[a-z]*_//g')/device.mk)
+
 # Overlays
 PRODUCT_PACKAGES += \
     WebViewOverlay \

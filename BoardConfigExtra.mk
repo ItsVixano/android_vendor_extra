@@ -18,6 +18,9 @@ MALLOC_SVELTE := true
 MALLOC_SVELTE_FOR_LIBC32 := true
 endif
 
+# MiuiCamera
+-include vendor/xiaomi/miuicamera-$(PRODUCT_DEVICE)/BoardConfig.mk
+
 # Props
 TARGET_VENDOR_PROP += $(VENDOR_EXTRA_PATH)/props/vendor.prop
 TARGET_SYSTEM_EXT_PROP += $(VENDOR_EXTRA_PATH)/props/system_ext.prop
