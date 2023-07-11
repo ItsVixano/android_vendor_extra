@@ -36,7 +36,7 @@ if [[ "${APPLY_PATCHES}" == "true" ]]; then
         project_path="$(tr _ / <<<$project_name)"
 
         cd $(gettop)/${project_path}
-        git am "${VENDOR_PATCHES_PATH_VERSION}"/${project_name}/*.patch
+        git am "${VENDOR_PATCHES_PATH_VERSION}"/${project_name}/*.patch --no-gpg-sign
         git am --abort &> /dev/null
     done
 
@@ -48,7 +48,7 @@ if [[ "${APPLY_PATCHES}" == "true" ]]; then
             project_path="$(tr _ / <<<$project_name)"
 
             cd $(gettop)/${project_path}
-            git am "${VENDOR_PATCHES_PATH_PRIV_VERSION}"/${project_name}/*.patch
+            git am "${VENDOR_PATCHES_PATH_PRIV_VERSION}"/${project_name}/*.patch --no-gpg-sign
             git am --abort &> /dev/null
         done
     fi

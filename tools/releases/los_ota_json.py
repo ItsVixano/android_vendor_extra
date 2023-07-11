@@ -77,7 +77,7 @@ dummy_ota_json.close()
 # Commit everything
 os.chdir(ota_path)
 os.system(
-    f'git add . && git commit -m "LineageOS_{codename}: lineage-{version[:-2]}: {sys.argv[1]}"'
+    f'git add . && git commit -m "LineageOS_{codename}: lineage-{version[:-2]}: {sys.argv[1]}" --no-gpg-sign'
 )
 
 if is_release_build:
