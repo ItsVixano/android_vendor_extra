@@ -18,7 +18,7 @@ is_release_build = False
 # Pre-checks
 if len(sys.argv) < 3:
     print(
-        "\nPlease mention for which device you want to create the releaase\n\n    ex: ./releases.py lisa 20220713\n"
+        "\nPlease mention for which device you want to create the releaase\n\n    ex: ./releases.py lisa 2022-07-05 20220713\n"
     )
     exit()
 
@@ -64,10 +64,13 @@ GH_TOKEN = os.getenv("TOKEN")
 GH_ASSETS = os.listdir("assets")
 GH_OWNER = "ItsVixano-releases"  # Github profile name
 GH_REPO = get_device(sys.argv[1])[3]  # Github repo name
-GH_TAG = sys.argv[2]  # Github release tag name
+GH_SECPATCH = sys.argv[2]  # LineageOS Security patch level
+GH_TAG = sys.argv[3]  # Github release tag name
 GH_LINEAGE = get_device(sys.argv[1])[2]  # LineageOS Release
 GH_NAME = f"LineageOS {GH_LINEAGE} for {get_device(sys.argv[1])[1]} ({GH_TAG})"
 GH_MESSAGE = f"""📅 Build date: `{GH_TAG}`
+
+🔒 Security patches: `{GH_SECPATCH}`
 
 📔 [Device Changelog](https://raw.githubusercontent.com/ItsVixano-releases/{GH_REPO}/main/lineage-{GH_LINEAGE[:-2]}/changelog_{GH_TAG}.txt)
 📕 [Installation instructions](https://guide.itsvixano.me)

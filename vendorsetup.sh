@@ -98,6 +98,8 @@ upload_assets() {
     # Defs
     local datetime_utc=$(cat out/target/product/"${DEVICE}"/system/build.prop | grep ro.build.date.utc=)
     local datetime=$(date -d @${datetime_utc#*=} +%Y%m%d)
+    local secpatch_prop=$(cat out/target/product/"${DEVICE}"/system/build.prop | grep ro.build.version.security_patch=)
+    local secpatch=${secpatch_prop#ro.build.version.security_patch=}
 
     if [[ -z "${DEVICE}" ]]; then
         LOGE "Please define \${DEVICE} value"
@@ -112,7 +114,7 @@ upload_assets() {
         cp ${file} "${VENDOR_EXTRA_PATH}"/tools/releases/assets &> /dev/null
     done
     cd "${VENDOR_EXTRA_PATH}"/tools/releases/
-    ./releases.py "${DEVICE}" ${datetime}
+    ./releases.py "${DEVICE}" ${secpatch} ${datetime}
 
     # Return to the root dir
     croot
