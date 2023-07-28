@@ -60,10 +60,10 @@ fi
 # functions
 los_changelog() {
     # Defs
-    local changelog_path="${VENDOR_EXTRA_PATH}"/tools/releases/LineageOS_"${DEVICE}"/lineage-"${LOS_VERSION}"
-    local changelog=${changelog_path}/changelog_${datetime}.txt
     local datetime_utc=$(cat out/target/product/"${DEVICE}"/system/build.prop | grep ro.build.date.utc=)
     local datetime=$(date -d @${datetime_utc#*=} +%Y%m%d)
+    local changelog_path="${VENDOR_EXTRA_PATH}"/tools/releases/LineageOS_"${DEVICE}"/lineage-"${LOS_VERSION}"
+    local changelog=${changelog_path}/changelog_${datetime}.txt
 
     if [[ -z "${DEVICE}" ]]; then
         LOGE "Please define \${DEVICE} value"
