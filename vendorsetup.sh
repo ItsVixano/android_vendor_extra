@@ -190,7 +190,7 @@ mka_build() {
         mka installclean
     fi
 
-    while ! mka bacon -j6; do
+    while ! mka bacon -j$(( $(nproc) / 2 + 2 )); do
         LOGE "bacon failed!"
         return 0
     done
@@ -252,7 +252,7 @@ mka_kernel() {
 
     for kernel_target in $kernel_targets;
     do
-        while ! mka ${kernel_target}; do
+        while ! mka ${kernel_target} -j$(( $(nproc) / 2 + 2 )); do
             LOGE "${kernel_target} failed!"
             return 0
             break
