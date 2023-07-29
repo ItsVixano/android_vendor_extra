@@ -97,7 +97,7 @@ los_changelog() {
 upload_assets() {
     # Defs
     local datetime_utc=$(cat out/target/product/"${DEVICE}"/system/build.prop | grep ro.build.date.utc=)
-    local datetime=$(date -d @${datetime_utc#*=} +%Y%m%d)
+    local datetime=$(date -d @${datetime_utc#*=} +%Y-%m-%d)
     local secpatch_prop=$(cat out/target/product/"${DEVICE}"/system/build.prop | grep ro.build.version.security_patch=)
     local secpatch=${secpatch_prop#ro.build.version.security_patch=}
 
