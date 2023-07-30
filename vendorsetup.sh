@@ -170,11 +170,9 @@ mka_build() {
     # Conditionally push the build to the public
     if [[ "${RELEASE_BUILD}" = "true" ]]; then
         LOGW "Pushing the build to the public once is done"
-        sed -i "s|is_release_build = False|is_release_build = True|g" "${VENDOR_EXTRA_PATH}"/tools/releases/releases.py
-        sed -i "s|is_release_build = False|is_release_build = True|g" "${VENDOR_EXTRA_PATH}"/tools/releases/los_ota_json.py
+        export IS_RELEASE_BUILD=True
     else
-        sed -i "s|is_release_build = True|is_release_build = False|g" "${VENDOR_EXTRA_PATH}"/tools/releases/los_ota_json.py
-        sed -i "s|is_release_build = True|is_release_build = False|g" "${VENDOR_EXTRA_PATH}"/tools/releases/releases.py
+        export IS_RELEASE_BUILD=False
     fi
 
     # goofy ahh build env
