@@ -35,6 +35,7 @@ except FileNotFoundError:
     )
     exit()
 
+
 # defs
 def get_device(var):
     return {
@@ -88,7 +89,7 @@ for asset in GH_ASSETS:
 print("\nCreating a release page ...")
 repo = Github(GH_TOKEN).get_repo(GH_OWNER + "/" + GH_REPO)
 release = repo.create_git_release(
-    GH_TAG.replace('-', ''),  # tag
+    GH_TAG.replace("-", ""),  # tag
     GH_NAME,  # name
     GH_MESSAGE,  # message
     draft=not is_release_build,  # draft
@@ -100,7 +101,7 @@ print(
 )
 sleep(3)  # Sleep for 3 second
 if is_release_build:
-    grep_command = f"grep {GH_TAG}"
+    grep_command = f"grep {GH_TAG.replace('-', '')}"
 else:
     grep_command = "grep untagged"
 

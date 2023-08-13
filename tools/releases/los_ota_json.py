@@ -75,12 +75,15 @@ dummy_ota_json.write(dummy_ota)
 dummy_ota_json.close()
 
 # Commit everything
+GH_DATE = sys.argv[1].replace("-", "")
 os.chdir(ota_path)
 os.system(
-    f'git add . && git commit -m "LineageOS_{codename}: lineage-{version[:-2]}: {sys.argv[1]}" --no-gpg-sign'
+    f'git add . && git commit -m "LineageOS_{codename}: lineage-{version[:-2]}: {GH_DATE}" --no-gpg-sign'
 )
 
 if is_release_build:
     load_dotenv()
     GH_TOKEN = os.getenv("TOKEN")
-    os.system(f"git push https://{GH_TOKEN}@github.com/ItsVixano-releases/LineageOS_{codename}.git HEAD:main")
+    os.system(
+        f"git push https://{GH_TOKEN}@github.com/ItsVixano-releases/LineageOS_{codename}.git HEAD:main"
+    )
