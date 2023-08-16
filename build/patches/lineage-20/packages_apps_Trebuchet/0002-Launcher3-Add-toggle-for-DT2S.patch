@@ -1,4 +1,4 @@
-From d7a56be7cb58206cbddc7c59cf5ffc22aea24944 Mon Sep 17 00:00:00 2001
+From 1fc95d1ab1262afa44e30034ea6d700902e9b6cd Mon Sep 17 00:00:00 2001
 From: DennySPB <dennyspb@gmail.com>
 Date: Fri, 27 Sep 2019 15:21:57 +0300
 Subject: [PATCH 2/4] Launcher3: Add toggle for DT2S
@@ -22,7 +22,7 @@ Change-Id: I22abb02de7394094653d571e20eee0e93fb1e9a5
  4 files changed, 27 insertions(+), 3 deletions(-)
 
 diff --git a/res/values/lineage_strings.xml b/res/values/lineage_strings.xml
-index dd03335..2c245ed 100644
+index dd03335495..2c245edbc9 100644
 --- a/res/values/lineage_strings.xml
 +++ b/res/values/lineage_strings.xml
 @@ -56,4 +56,8 @@
@@ -35,7 +35,7 @@ index dd03335..2c245ed 100644
 +    <string name="pref_dt_gesture_summary">Double tap on empty space for power-off</string>
  </resources>
 diff --git a/res/xml/launcher_preferences.xml b/res/xml/launcher_preferences.xml
-index 83ef5b3..36554e8 100644
+index 83ef5b3bd2..36554e849c 100644
 --- a/res/xml/launcher_preferences.xml
 +++ b/res/xml/launcher_preferences.xml
 @@ -68,6 +68,13 @@
@@ -53,7 +53,7 @@ index 83ef5b3..36554e8 100644
          android:key="pref_suggestions"
          android:title="@string/pref_suggestions_title"
 diff --git a/src/com/android/launcher3/Utilities.java b/src/com/android/launcher3/Utilities.java
-index e512011..f0e16a2 100644
+index e5120113b5..f0e16a210e 100644
 --- a/src/com/android/launcher3/Utilities.java
 +++ b/src/com/android/launcher3/Utilities.java
 @@ -130,6 +130,8 @@ public final class Utilities {
@@ -76,7 +76,7 @@ index e512011..f0e16a2 100644
 +    }
  }
 diff --git a/src/com/android/launcher3/touch/WorkspaceTouchListener.java b/src/com/android/launcher3/touch/WorkspaceTouchListener.java
-index 9bca4c2..2b0acb4 100644
+index 9bca4c25c6..2b0acb4621 100644
 --- a/src/com/android/launcher3/touch/WorkspaceTouchListener.java
 +++ b/src/com/android/launcher3/touch/WorkspaceTouchListener.java
 @@ -48,6 +48,8 @@ import com.android.launcher3.testing.TestLogging;
@@ -119,5 +119,5 @@ index 9bca4c2..2b0acb4 100644
      }
  }
 -- 
-2.40.1
+2.41.0
 

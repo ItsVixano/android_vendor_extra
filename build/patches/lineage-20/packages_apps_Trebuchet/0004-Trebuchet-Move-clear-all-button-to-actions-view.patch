@@ -1,4 +1,4 @@
-From 570413d49705998563d8184dbbf6393f154fabc2 Mon Sep 17 00:00:00 2001
+From c3c4d801099bab0bb9f3759f7431cd366ab6eb67 Mon Sep 17 00:00:00 2001
 From: Vachounet <vachounet@live.fr>
 Date: Mon, 26 Oct 2020 17:05:18 +0100
 Subject: [PATCH 4/4] Trebuchet: Move clear all button to actions view
@@ -17,7 +17,7 @@ Change-Id: I7a0b2729c163169f7606ad4644870d07d5165e8e
 
 diff --git a/quickstep/res/drawable/ic_recents_clear_all.xml b/quickstep/res/drawable/ic_recents_clear_all.xml
 new file mode 100644
-index 0000000..2ad0bb8
+index 0000000000..2ad0bb824d
 --- /dev/null
 +++ b/quickstep/res/drawable/ic_recents_clear_all.xml
 @@ -0,0 +1,18 @@
@@ -40,7 +40,7 @@ index 0000000..2ad0bb8
 +    <path android:fillColor="#FF000000" android:pathData="M5,13H19V11H5M3,17H17V15H3M7,7V9H21V7" />
 +</vector>
 diff --git a/quickstep/res/layout/overview_actions_container.xml b/quickstep/res/layout/overview_actions_container.xml
-index 0fda0bf..9a6f5ae 100644
+index 0fda0bf8d4..9a6f5ae062 100644
 --- a/quickstep/res/layout/overview_actions_container.xml
 +++ b/quickstep/res/layout/overview_actions_container.xml
 @@ -40,6 +40,21 @@
@@ -73,7 +73,7 @@ index 0fda0bf..9a6f5ae 100644
 \ No newline at end of file
 +</com.android.quickstep.views.OverviewActionsView>
 diff --git a/quickstep/src/com/android/quickstep/fallback/RecentsState.java b/quickstep/src/com/android/quickstep/fallback/RecentsState.java
-index 8b5f091..601021b 100644
+index 8b5f091e11..601021b5bf 100644
 --- a/quickstep/src/com/android/quickstep/fallback/RecentsState.java
 +++ b/quickstep/src/com/android/quickstep/fallback/RecentsState.java
 @@ -106,7 +106,7 @@ public class RecentsState implements BaseState<RecentsState> {
@@ -86,7 +86,7 @@ index 8b5f091..601021b 100644
  
      /**
 diff --git a/quickstep/src/com/android/quickstep/views/LauncherRecentsView.java b/quickstep/src/com/android/quickstep/views/LauncherRecentsView.java
-index c165acc..d9b1da5 100644
+index c165accc52..d9b1da5cfe 100644
 --- a/quickstep/src/com/android/quickstep/views/LauncherRecentsView.java
 +++ b/quickstep/src/com/android/quickstep/views/LauncherRecentsView.java
 @@ -151,8 +151,7 @@ public class LauncherRecentsView extends RecentsView<QuickstepLauncher, Launcher
@@ -100,7 +100,7 @@ index c165acc..d9b1da5 100644
          }
          if (mActivity.getDesktopVisibilityController() != null) {
 diff --git a/quickstep/src/com/android/quickstep/views/RecentsView.java b/quickstep/src/com/android/quickstep/views/RecentsView.java
-index 904537f..9222e45 100644
+index 904537fddf..9222e456e5 100644
 --- a/quickstep/src/com/android/quickstep/views/RecentsView.java
 +++ b/quickstep/src/com/android/quickstep/views/RecentsView.java
 @@ -117,6 +117,7 @@ import android.view.ViewTreeObserver.OnScrollChangedListener;
@@ -138,5 +138,5 @@ index 904537f..9222e45 100644
  
      @Override
 -- 
-2.40.1
+2.41.0
 
