@@ -6,6 +6,6 @@
 //
 
 runtime_resource_overlay {
-    name: "BromiteWebViewOverlay",
+    name: "WebViewOverlay",
     system_ext_specific: true,
 }

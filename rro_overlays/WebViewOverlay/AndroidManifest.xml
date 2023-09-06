@@ -6,7 +6,7 @@
      SPDX-License-Identifier: Apache-2.0
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="android.bromitewebviews.custom"
+    package="android.webviews.custom"
     android:versionCode="1"
     android:versionName="1.0">
 

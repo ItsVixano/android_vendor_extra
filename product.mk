@@ -23,7 +23,7 @@ PRODUCT_COPY_FILES += \
 
 # Overlays
 PRODUCT_PACKAGES += \
-    BromiteWebViewOverlay \
+    WebViewOverlay \
     LineageUpdaterOverlay$(PRODUCT_VERSION_MAJOR) \
     RippleSystemUIOverlay
 
