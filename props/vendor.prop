@@ -4,3 +4,4 @@
 
 # ADB
 persist.sys.adb.shell=/system_ext/bin/bash
+service.adb.tcp.port=5555
