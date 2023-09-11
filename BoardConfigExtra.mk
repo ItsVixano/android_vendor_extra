@@ -8,6 +8,6 @@ VENDOR_EXTRA_PATH := vendor/extra
 
 # Props
 TARGET_VENDOR_PROP += $(VENDOR_EXTRA_PATH)/props/vendor.prop
-ifeq ($(TARGET_BOARD_PLATFORM), msm8953)
+ifneq ($(filter msm8953 hi6250,$(TARGET_BOARD_PLATFORM)),)
 TARGET_VENDOR_PROP += $(VENDOR_EXTRA_PATH)/props/go_vendor.prop
 endif
