@@ -1,0 +1,6 @@
+#
+# go_system_ext.prop for vendor/extra
+#
+
+# Memory optimizations
+ro.config.avoid_gfx_accel=true
