@@ -1,0 +1,191 @@
+From ef53c2d34855ba12d2be6e6a8d54a50da4324c37 Mon Sep 17 00:00:00 2001
+From: Danny Lin <danny@kdrag0n.dev>
+Date: Mon, 5 Apr 2021 21:45:18 -0700
+Subject: [PATCH 19/20] EventLog: Disable event writing in production builds
+
+When opening and closing activities in Settings, a measurably
+significant amount of CPU time is spent writing to the EventLog, as
+reported by simpleperf:
+
+0.01%     /system/lib64/libandroid_runtime.so                                                                                                       android::EventLogHelper<(log_id)2, &(android::kEventLogEventClass)>::writeEventArray(_JNIEnv*, _jobject*, int, _jobjectArray*)
+
+We have no use for EventLog events in production builds, so disable
+event writing entirely on non-debuggable builds.
+
+To avoid having to check ro.debuggable in native code and pay the
+overhead of a JNI call for every event, perform checks on the Java side
+and make the native method implementations private for delegation.
+
+Test: simpleperf record -a; verify that EventLogHelper no longer
+      appears in sample hits
+Change-Id: I3505c460f234d9a5038bd1f9d41ce911697ca76e
+Signed-off-by: Pranav Vashi <neobuddy89@gmail.com>
+---
+ core/java/android/util/EventLog.java | 74 ++++++++++++++++++++++++----
+ core/jni/android_util_EventLog.cpp   | 14 +++---
+ 2 files changed, 71 insertions(+), 17 deletions(-)
+
+diff --git a/core/java/android/util/EventLog.java b/core/java/android/util/EventLog.java
+index 4654dbfa..a09bc697 100644
+--- a/core/java/android/util/EventLog.java
++++ b/core/java/android/util/EventLog.java
+@@ -328,15 +328,19 @@ public class EventLog {
+         }
+     }
+ 
+-    // We assume that the native methods deal with any concurrency issues.
+-
+     /**
+      * Record an event log message.
+      * @param tag The event type tag code
+      * @param value A value to log
+      * @return The number of bytes written
+      */
+-    public static native int writeEvent(int tag, int value);
++    public static int writeEvent(int tag, int value) {
++        if (!Build.IS_DEBUGGABLE) {
++            return 0;
++        }
++
++        return nativeWriteEvent(tag, value);
++    }
+ 
+     /**
+      * Record an event log message.
+@@ -344,7 +348,13 @@ public class EventLog {
+      * @param value A value to log
+      * @return The number of bytes written
+      */
+-    public static native int writeEvent(int tag, long value);
++    public static int writeEvent(int tag, long value) {
++        if (!Build.IS_DEBUGGABLE) {
++            return 0;
++        }
++
++        return nativeWriteEvent(tag, value);
++    }
+ 
+     /**
+      * Record an event log message.
+@@ -352,7 +362,13 @@ public class EventLog {
+      * @param value A value to log
+      * @return The number of bytes written
+      */
+-    public static native int writeEvent(int tag, float value);
++    public static int writeEvent(int tag, float value) {
++        if (!Build.IS_DEBUGGABLE) {
++            return 0;
++        }
++
++        return nativeWriteEvent(tag, value);
++    }
+ 
+     /**
+      * Record an event log message.
+@@ -360,7 +376,13 @@ public class EventLog {
+      * @param str A value to log
+      * @return The number of bytes written
+      */
+-    public static native int writeEvent(int tag, String str);
++    public static int writeEvent(int tag, String str) {
++        if (!Build.IS_DEBUGGABLE) {
++            return 0;
++        }
++
++        return nativeWriteEvent(tag, str);
++    }
+ 
+     /**
+      * Record an event log message.
+@@ -368,7 +390,13 @@ public class EventLog {
+      * @param list A list of values to log
+      * @return The number of bytes written
+      */
+-    public static native int writeEvent(int tag, Object... list);
++    public static int writeEvent(int tag, Object... list) {
++        if (!Build.IS_DEBUGGABLE) {
++            return 0;
++        }
++
++        return nativeWriteEvent(tag, list);
++    }
+ 
+     /**
+      * Read events from the log, filtered by type.
+@@ -376,8 +404,14 @@ public class EventLog {
+      * @param output container to add events into
+      * @throws IOException if something goes wrong reading events
+      */
+-    public static native void readEvents(int[] tags, Collection<Event> output)
+-            throws IOException;
++    public static void readEvents(int[] tags, Collection<Event> output)
++            throws IOException {
++        if (!Build.IS_DEBUGGABLE) {
++            return;
++        }
++
++        nativeReadEvents(tags, output);
++    }
+ 
+     /**
+      * Read events from the log, filtered by type, blocking until logs are about to be overwritten.
+@@ -388,7 +422,27 @@ public class EventLog {
+      * @hide
+      */
+     @SystemApi
+-    public static native void readEventsOnWrapping(int[] tags, long timestamp,
++    public static void readEventsOnWrapping(int[] tags, long timestamp,
++            Collection<Event> output)
++            throws IOException {
++        if (!Build.IS_DEBUGGABLE) {
++            return;
++        }
++
++        nativeReadEventsOnWrapping(tags, timestamp, output);
++    }
++
++    // We assume that the native methods deal with any concurrency issues.
++
++    private static native int nativeWriteEvent(int tag, int value);
++    private static native int nativeWriteEvent(int tag, long value);
++    private static native int nativeWriteEvent(int tag, float value);
++    private static native int nativeWriteEvent(int tag, String str);
++    private static native int nativeWriteEvent(int tag, Object... list);
++
++    private static native void nativeReadEvents(int[] tags, Collection<Event> output)
++            throws IOException;
++    private static native void nativeReadEventsOnWrapping(int[] tags, long timestamp,
+             Collection<Event> output)
+             throws IOException;
+ 
+diff --git a/core/jni/android_util_EventLog.cpp b/core/jni/android_util_EventLog.cpp
+index 0a5e7861..2e9aa340 100644
+--- a/core/jni/android_util_EventLog.cpp
++++ b/core/jni/android_util_EventLog.cpp
+@@ -68,16 +68,16 @@ static void android_util_EventLog_readEventsOnWrapping(JNIEnv* env, jobject claz
+  */
+ static const JNINativeMethod gRegisterMethods[] = {
+     /* name, signature, funcPtr */
+-    { "writeEvent", "(II)I", (void*) ELog::writeEventInteger },
+-    { "writeEvent", "(IJ)I", (void*) ELog::writeEventLong },
+-    { "writeEvent", "(IF)I", (void*) ELog::writeEventFloat },
+-    { "writeEvent", "(ILjava/lang/String;)I", (void*) ELog::writeEventString },
+-    { "writeEvent", "(I[Ljava/lang/Object;)I", (void*) ELog::writeEventArray },
+-    { "readEvents",
++    { "nativeWriteEvent", "(II)I", (void*) ELog::writeEventInteger },
++    { "nativeWriteEvent", "(IJ)I", (void*) ELog::writeEventLong },
++    { "nativeWriteEvent", "(IF)I", (void*) ELog::writeEventFloat },
++    { "nativeWriteEvent", "(ILjava/lang/String;)I", (void*) ELog::writeEventString },
++    { "nativeWriteEvent", "(I[Ljava/lang/Object;)I", (void*) ELog::writeEventArray },
++    { "nativeReadEvents",
+       "([ILjava/util/Collection;)V",
+       (void*) android_util_EventLog_readEvents
+     },
+-    { "readEventsOnWrapping",
++    { "nativeReadEventsOnWrapping",
+       "([IJLjava/util/Collection;)V",
+       (void*) android_util_EventLog_readEventsOnWrapping
+     },
+-- 
+2.42.0
+

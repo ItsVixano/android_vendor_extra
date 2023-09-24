@@ -1,7 +1,7 @@
-From ea7542b2745f91e6a7ba81ceb802c659597fa208 Mon Sep 17 00:00:00 2001
+From 2925b069eee8ca3de22bcd402663c05e6b2be800 Mon Sep 17 00:00:00 2001
 From: 00day0 <therandomuser11@gmail.com>
 Date: Tue, 10 Jan 2023 19:50:47 +0000
-Subject: [PATCH 6/8] Revert "Update Media Seekbar Thumb Shape"
+Subject: [PATCH 08/20] Revert "Update Media Seekbar Thumb Shape"
 
 This reverts commit fe8cdfc0c8042b7118bc353f843f7b94d1fd4822.
 
@@ -69,10 +69,10 @@ index 5eb2bfdb..00000000
 -    </target>
 -</animated-vector>
 diff --git a/packages/SystemUI/res/values/styles.xml b/packages/SystemUI/res/values/styles.xml
-index dfc6ba47..715448eb 100644
+index 892c2f4c..6f5af56a 100644
 --- a/packages/SystemUI/res/values/styles.xml
 +++ b/packages/SystemUI/res/values/styles.xml
-@@ -610,7 +610,6 @@
+@@ -611,7 +611,6 @@
      </style>
  
      <style name="MediaPlayer.ProgressBar" parent="@android:style/Widget.ProgressBar.Horizontal">
@@ -81,5 +81,5 @@ index dfc6ba47..715448eb 100644
          <item name="android:progressDrawable">@drawable/media_squiggly_progress</item>
          <item name="android:progressTint">?android:attr/textColorPrimary</item>
 -- 
-2.40.0
+2.42.0
 

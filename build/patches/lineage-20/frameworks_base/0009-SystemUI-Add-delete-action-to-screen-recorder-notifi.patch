@@ -1,7 +1,7 @@
-From c57406eb154d2ccf6758403bf120712f03ca76f3 Mon Sep 17 00:00:00 2001
+From add788762e3eed549781a8c0087cdace1c6497d4 Mon Sep 17 00:00:00 2001
 From: Sourajit Karmakar <sourajit.karmakar@gmail.com>
 Date: Tue, 29 Dec 2020 21:50:09 +0100
-Subject: [PATCH 7/8] SystemUI: Add delete action to screen recorder
+Subject: [PATCH 09/20] SystemUI: Add delete action to screen recorder
  notification
 
 This reverts commit 6fcdb6bf9e396f89cd497ee82811dbef6179caba.
@@ -18,10 +18,10 @@ Reviewed-on: https://review.statixos.com/c/android_frameworks_base/+/7199
  2 files changed, 39 insertions(+)
 
 diff --git a/packages/SystemUI/res/values/strings.xml b/packages/SystemUI/res/values/strings.xml
-index 977adde6..a9dd7796 100644
+index 81241c91..a827ed9c 100644
 --- a/packages/SystemUI/res/values/strings.xml
 +++ b/packages/SystemUI/res/values/strings.xml
-@@ -285,11 +285,15 @@
+@@ -291,11 +291,15 @@
      <string name="screenrecord_stop_label">Stop</string>
      <!-- Label for notification action to share screen recording [CHAR LIMIT=35] -->
      <string name="screenrecord_share_label">Share</string>
@@ -119,5 +119,5 @@ index 04776266..885e88a6 100644
      public void onInfo(MediaRecorder mr, int what, int extra) {
          Log.d(TAG, "Media recorder info: " + what);
 -- 
-2.40.0
+2.42.0
 

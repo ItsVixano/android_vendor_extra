@@ -1,7 +1,7 @@
-From f19b54b6477e659bc5b1bd6848282b17e8fde860 Mon Sep 17 00:00:00 2001
+From 6d194478bd6c367e299d9b14aef3e59eaa0e8563 Mon Sep 17 00:00:00 2001
 From: wbs306 <wbs306@gmail.com>
 Date: Thu, 27 Oct 2022 20:58:17 +0800
-Subject: [PATCH 8/8] Camera: Expose aux camera if packagename is null
+Subject: [PATCH 10/20] Camera: Expose aux camera if packagename is null
 
 In case of the pacckage name not being found properly
 the name would always be found in the excludelist, even
@@ -15,10 +15,10 @@ Change-Id: I75c620ab876ebabf71c740e04004e4120edd93ae
  1 file changed, 2 insertions(+)
 
 diff --git a/core/java/android/hardware/Camera.java b/core/java/android/hardware/Camera.java
-index 2fbcf5bf..7e59d860 100644
+index e986320b..388b3104 100644
 --- a/core/java/android/hardware/Camera.java
 +++ b/core/java/android/hardware/Camera.java
-@@ -278,6 +278,8 @@ public class Camera {
+@@ -273,6 +273,8 @@ public class Camera {
           * if the package name does not falls in this bucket
           */
          String packageName = ActivityThread.currentOpPackageName();
@@ -28,5 +28,5 @@ index 2fbcf5bf..7e59d860 100644
                  SystemProperties.get("vendor.camera.aux.packagelist", ",").split(",")));
          List<String> packageExcludelist = new ArrayList<>(Arrays.asList(
 -- 
-2.40.0
+2.42.0
 
