@@ -1,7 +1,7 @@
-From df0e6a75ed3a748f51efcf22b880cf39e2e4c523 Mon Sep 17 00:00:00 2001
+From 2e6d70c755301693b07eba1b2fcc8e394020f42d Mon Sep 17 00:00:00 2001
 From: Michael W <baddaemon87@gmail.com>
 Date: Fri, 6 Jan 2023 21:00:01 +0800
-Subject: [PATCH 3/6] soong: Specify heap size for metalava for S+
+Subject: [PATCH 3/7] soong: Specify heap size for metalava for S+
 
 filiprrs: This is needed on systems with less than 16GB physical ram.
 Compiling using a single job is recommended.
@@ -50,5 +50,5 @@ index aadf4af4e..8e41706c5 100644
  			ctx.Println("and even with that, some configurations may not work.")
  			ctx.Println("")
 -- 
-2.40.1
+2.42.0
 

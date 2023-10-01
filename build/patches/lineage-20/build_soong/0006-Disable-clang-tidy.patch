@@ -1,7 +1,7 @@
-From a0f0f89602697b803e7fb6ac30a845eeefd7ca1d Mon Sep 17 00:00:00 2001
+From 60333a06e0038cbbc92f266bc993fd847718e1ff Mon Sep 17 00:00:00 2001
 From: Danny Lin <danny@kdrag0n.dev>
 Date: Mon, 1 Mar 2021 23:11:06 -0800
-Subject: [PATCH 6/6] Disable clang-tidy
+Subject: [PATCH 6/7] Disable clang-tidy
 
 Running clang-tidy on all the AOSP code is of little use for us, but it
 takes a substantial amount of build time. Disable it to reduce build
@@ -26,5 +26,5 @@ index 750e9de1e..63f525e00 100644
  	// If explicitly enabled, by global default or local tidy property,
  	// set flags.NeedTidyFiles to make this module depend on .tidy files.
 -- 
-2.40.1
+2.42.0
 
