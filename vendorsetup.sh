@@ -50,6 +50,7 @@ if [[ "${APPLY_PATCHES}" == "true" ]]; then
         LOGI "Applying Private Patches"
         for project_name in $(cd "${VENDOR_PATCHES_PATH_PRIV_VERSION}"; echo */); do
             project_path="$(tr _ / <<<$project_name)"
+            if [[ $project_name == "external_jemalloc_new/" ]]; then project_path="external/jemalloc_new/"; fi
 
             cd $(gettop)/${project_path}
             git am "${VENDOR_PATCHES_PATH_PRIV_VERSION}"/${project_name}/*.patch --no-gpg-sign
