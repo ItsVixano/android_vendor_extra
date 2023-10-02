@@ -9,6 +9,10 @@
 export BUILD_USERNAME=itsvixano
 export BUILD_HOSTNAME=android-build
 
+# Disable ART debugging
+export USE_DEX2OAT_DEBUG=false
+export WITH_DEXPREOPT_DEBUG_INFO=false
+
 # Defs
 LOS_VERSION=$(grep "PRODUCT_VERSION_MAJOR" $(gettop)/vendor/lineage/config/version.mk | sed 's/PRODUCT_VERSION_MAJOR = //g' | head -1)
 VENDOR_EXTRA_PATH=$(gettop)/vendor/extra
