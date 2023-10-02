@@ -1,0 +1,49 @@
+From 1597298c4536d856ae899a00073fdfc387143b4e Mon Sep 17 00:00:00 2001
+From: "pioush.kumar-IN009423" <pioush.kumar@oppo.com>
+Date: Thu, 16 Mar 2023 17:28:05 +0530
+Subject: [PATCH 39/72] Activity not finishing even after pressing back key
+
+Problem: {
+    1. Start any new task with activity A
+    2. Start Activity B that is in new process but must not occludes parent.
+    3. Then start activity C in same process of A.
+    4. All three must be in same task.
+    5. Now press back key.
+    6. C must override finishAfterTransition and calls API covertToTranslucent
+    7. Observe below activity window is shown, but not resume and above activity is not visible but it is still resumed.
+}
+
+Solution: {
+    1. Get below activity in task that is in same process.
+    2. Set for both below one and for below activity in same process
+}
+
+Bug: 273901491
+Signed-off-by: pioush.kumar-IN009423 <pioush.kumar@oppo.com>
+Change-Id: I25e5d387a3f5fa91520d0d63a7844d7ed009c756
+---
+ .../com/android/server/wm/ActivityClientController.java   | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/services/core/java/com/android/server/wm/ActivityClientController.java b/services/core/java/com/android/server/wm/ActivityClientController.java
+index 7c9244e3..6935af81 100644
+--- a/services/core/java/com/android/server/wm/ActivityClientController.java
++++ b/services/core/java/com/android/server/wm/ActivityClientController.java
+@@ -761,6 +761,14 @@ class ActivityClientController extends IActivityClientController.Stub {
+                 final ActivityRecord under = r.getTask().getActivityBelow(r);
+                 if (under != null) {
+                     under.returningOptions = safeOptions != null ? safeOptions.getOptions(r) : null;
++                    if (!under.occludesParent()) {
++                        final ActivityRecord underInSameProcess = r.getTask().getActivity(
++                                (ar) -> ar.app == r.app && ar != r && ar != under);
++                        if (underInSameProcess != null) {
++                            underInSameProcess.returningOptions =
++                                    safeOptions != null ? safeOptions.getOptions(r) : null;
++                        }
++                    }
+                 }
+                 // Create a transition if the activity is playing in case the current activity
+                 // didn't commit invisible. That's because if this activity has changed its
+-- 
+2.42.0
+

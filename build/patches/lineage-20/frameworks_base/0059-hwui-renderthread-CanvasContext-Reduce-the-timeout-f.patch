@@ -1,0 +1,33 @@
+From 39594b0773cf4e4ef620f3bc86a019e733965ac7 Mon Sep 17 00:00:00 2001
+From: electimon <electimon@hentaios.com>
+Date: Thu, 29 Dec 2022 04:30:06 +0000
+Subject: [PATCH 59/72] hwui: renderthread/CanvasContext: Reduce the timeout
+ for dequeueing buffers
+
+* QPR1 has introduced an issue on all moto-common projects where
+* OpenGLRenderer could fail to dequeue buffers sproradically
+* We can reduce this timeout in order to not inconvenience
+* the user with a laggy UI
+
+Change-Id: Ib8bed652d597c1789806211bdfa885050caf1dfe
+Signed-off-by: electimon <electimon@hentaios.com>
+---
+ libs/hwui/renderthread/CanvasContext.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libs/hwui/renderthread/CanvasContext.cpp b/libs/hwui/renderthread/CanvasContext.cpp
+index f56d19bf..53c84105 100644
+--- a/libs/hwui/renderthread/CanvasContext.cpp
++++ b/libs/hwui/renderthread/CanvasContext.cpp
+@@ -179,7 +179,7 @@ void CanvasContext::setSurface(ANativeWindow* window, bool enableTimeout) {
+         mNativeSurface->init();
+         if (enableTimeout) {
+             // TODO: Fix error handling & re-shorten timeout
+-            ANativeWindow_setDequeueTimeout(window, 4000_ms);
++            ANativeWindow_setDequeueTimeout(window, 16_ms);
+         }
+     } else {
+         mNativeSurface = nullptr;
+-- 
+2.42.0
+

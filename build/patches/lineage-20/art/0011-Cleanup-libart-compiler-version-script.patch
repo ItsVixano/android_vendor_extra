@@ -1,0 +1,208 @@
+From 41f3015242a378bc0cab889c787d922262738acd Mon Sep 17 00:00:00 2001
+From: Dmitrii Ishcheikin <ishcheikin@google.com>
+Date: Thu, 22 Sep 2022 14:54:35 +0000
+Subject: [PATCH 11/30] Cleanup libart-compiler version script
+
+Add Apache license header
+Use globs instead of full symbol names to avoid issues with different
+compiler versions
+Link libelffile without whole-archive
+
+Bug: 186902856
+Change-Id: I22fe724a4868bd29cd2ff543846c1e0c819cb460
+Test: m test-art-host-gtest-art_runtime_tests test-art-host-gtest-art_runtime_compiler_tests
+Test: m dex2oat oatdump
+---
+ compiler/Android.bp          | 12 ++++--
+ compiler/libart-compiler.map | 75 ++++++++++++++++--------------------
+ dex2oat/Android.bp           |  8 ++++
+ 3 files changed, 49 insertions(+), 46 deletions(-)
+
+diff --git a/compiler/Android.bp b/compiler/Android.bp
+index 15d86ed24b..14885c68cc 100644
+--- a/compiler/Android.bp
++++ b/compiler/Android.bp
+@@ -176,6 +176,7 @@ art_cc_defaults {
+     ],
+ 
+     export_include_dirs: ["."],
++    // Not using .map.txt because this is an internal API
+     version_script: "libart-compiler.map",
+ }
+ 
+@@ -229,7 +230,7 @@ art_cc_library {
+         "libprofile",
+         "libdexfile",
+     ],
+-    whole_static_libs: ["libelffile"],
++    static_libs: ["libelffile"],
+     runtime_libs: [
+         // `art::HGraphVisualizerDisassembler::HGraphVisualizerDisassembler` may dynamically load
+         // `libart-disassembler.so`.
+@@ -297,7 +298,7 @@ art_cc_library {
+         "libprofiled",
+         "libdexfiled",
+     ],
+-    whole_static_libs: ["libelffiled"],
++    static_libs: ["libelffiled"],
+     runtime_libs: [
+         // `art::HGraphVisualizerDisassembler::HGraphVisualizerDisassembler` may dynamically load
+         // `libartd-disassembler.so`.
+@@ -493,8 +494,9 @@ art_cc_test {
+         "liblzma",
+     ],
+     static_libs: [
+-        "libvixld",
+         "libartd-compiler",
++        "libelffiled",
++        "libvixld",
+     ],
+ }
+ 
+@@ -518,8 +520,9 @@ art_cc_test {
+         // TODO(b/192070541): Consider linking `libart-simulator-container`
+         // dynamically.
+         "libart-simulator-container",
+-        "libvixl",
+         "libart-compiler",
++        "libelffile",
++        "libvixl",
+     ],
+     test_config: "art_standalone_compiler_tests.xml",
+ }
+@@ -556,6 +559,7 @@ art_cc_test {
+     ],
+     static_libs: [
+         "libartd-compiler",
++        "libelffiled",
+         "libvixld",
+     ],
+ }
+diff --git a/compiler/libart-compiler.map b/compiler/libart-compiler.map
+index 3522d045ba..7e7841f995 100644
+--- a/compiler/libart-compiler.map
++++ b/compiler/libart-compiler.map
+@@ -1,47 +1,38 @@
++#
++# Copyright (C) 2022 The Android Open Source Project
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#      http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++#
+ 
+ ART_COMPILER {
+-global:
+-    global:
+-        extern "C++" {
+-            # TODO(b/247611526): replace more long unmangled names with simple glob patterns
+-            "art::CompiledCode::CodeDelta() const";
+-            "art::CompiledCode::CodeDelta(art::InstructionSet)";
+-            "art::CompiledCode::CodePointer(void const*, art::InstructionSet)";
+-            "art::CompiledMethodStorage::CompiledMethodStorage(int)";
+-            "art::CompiledMethodStorage::UniqueVMapTableEntries() const";
+-            "art::CompiledMethodStorage::~CompiledMethodStorage()";
+-            "art::Compiler::Create(art::CompilerOptions const&, art::CompiledMethodStorage*, art::Compiler::Kind)";
+-            "art::CompilerOptions::CompilerOptions()";
+-            "art::CompilerOptions::GetVerificationResults() const";
+-            "art::CompilerOptions::IsImageClass(char const*) const";
+-            "art::CompilerOptions::IsPreloadedClass(char const*) const";
+-            "art::CompilerOptions::ShouldCompileWithClinitCheck(art::ArtMethod*) const";
+-            "art::CompilerOptions::~CompilerOptions()";
+-            "art::CreateTrampoline32(art::InstructionSet, art::EntryPointCallingConvention, art::ThreadOffset<(art::PointerSize)4>)";
+-            "art::CreateTrampoline64(art::InstructionSet, art::EntryPointCallingConvention, art::ThreadOffset<(art::PointerSize)8>)";
+-            "art::VerificationResults::AddRejectedClass(art::ClassReference)";
+-            "art::VerificationResults::AddUncompilableMethod(art::MethodReference)";
+-            "art::VerificationResults::IsClassRejected(art::ClassReference) const";
+-            "art::VerificationResults::IsUncompilableMethod(art::MethodReference) const";
+-            "art::VerificationResults::VerificationResults()";
+-            "art::VerificationResults::~VerificationResults()";
+-            "void art::debug::WriteDebugInfo<art::ElfTypes32>(art::ElfBuilder<art::ElfTypes32>*, art::debug::DebugInfo const&)";
+-            "void art::debug::WriteDebugInfo<art::ElfTypes64>(art::ElfBuilder<art::ElfTypes64>*, art::debug::DebugInfo const&)";
+-            art::CompiledCode::AlignCode*;
+-            art::CompiledMethod::*;
+-            art::CompiledMethodStorage::DumpMemoryUsage*;
+-            art::CompiledMethodStorage::GetThunkCode*;
+-            art::CompilerOptions::ParseDumpInitFailures*;
+-            art::CompilerOptions::ParseRegisterAllocationStrategy*;
+-            art::IntrinsicObjects*;
+-            art::debug::MakeMiniDebugInfo*;
+-            art::linker::operator*;
+-            art::operator*;
+-        };
++  global:
++    extern "C++" {
++      *art::debug::WriteDebugInfo*;
++      art::CompiledCode::*;
++      art::CompiledMethod::*;
++      art::CompiledMethodStorage::*;
++      art::Compiler::Create*;
++      art::CompilerOptions::*;
++      art::CreateTrampoline*;
++      art::IntrinsicObjects::*;
++      art::VerificationResults::*;
++      art::debug::MakeMiniDebugInfo*;
++      art::linker::operator*art::linker::LinkerPatch::Type*;
++      art::operator*art::Whence*;
++    };
+ 
+-        jit_load;
++    jit_load;
+ 
+-    local:
+-        *;
++  local:
++    *;
+ };
+-
+diff --git a/dex2oat/Android.bp b/dex2oat/Android.bp
+index 3438853958..c046e9db6d 100644
+--- a/dex2oat/Android.bp
++++ b/dex2oat/Android.bp
+@@ -106,6 +106,9 @@ art_cc_library_static {
+         "libartpalette",
+         "libprofile",
+     ],
++    static_libs: [
++        "libelffile",
++    ],
+     apex_available: [
+         "com.android.art",
+         "com.android.art.debug",
+@@ -157,6 +160,9 @@ art_cc_library_static {
+         "libartpalette",
+         "libprofiled",
+     ],
++    static_libs: [
++        "libelffiled",
++    ],
+     apex_available: [
+         "com.android.art.debug",
+     ],
+@@ -563,6 +569,7 @@ art_cc_test {
+         "libartd-compiler",
+         "libartd-dex2oat",
+         "libartd-dex2oat-gtest",
++        "libelffiled",
+         "libvixld",
+     ],
+ }
+@@ -585,6 +592,7 @@ art_cc_test {
+         "libart-compiler",
+         "libart-dex2oat",
+         "libart-dex2oat-gtest",
++        "libelffile",
+         "libvixl",
+     ],
+     test_config: "art_standalone_dex2oat_tests.xml",
+-- 
+2.42.0
+

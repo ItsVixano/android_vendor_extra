@@ -1,0 +1,38 @@
+From f8125213060d87864705eb14ecd818bede0944f3 Mon Sep 17 00:00:00 2001
+From: Shih-hsin Li <seasonl@nvidia.com>
+Date: Fri, 21 Apr 2023 12:13:47 -0700
+Subject: [PATCH 70/72] HWUI: reset buffer state only for ES3 context
+
+Reset buffer state only for ES3 context and above since other context
+type can't have buffer state set to GL_NONE.
+
+Change-Id: I4da3bda6e48afce9bc94abd54ccc403de88c3597
+---
+ libs/hwui/pipeline/skia/SkiaOpenGLPipeline.cpp | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/libs/hwui/pipeline/skia/SkiaOpenGLPipeline.cpp b/libs/hwui/pipeline/skia/SkiaOpenGLPipeline.cpp
+index 63c36f85..b5c1b490 100644
+--- a/libs/hwui/pipeline/skia/SkiaOpenGLPipeline.cpp
++++ b/libs/hwui/pipeline/skia/SkiaOpenGLPipeline.cpp
+@@ -66,12 +66,15 @@ MakeCurrentResult SkiaOpenGLPipeline::makeCurrent() {
+         return MakeCurrentResult::AlreadyCurrent;
+     }
+ 
+-    // Make sure read/draw buffer state of default framebuffer is GL_BACK. Vendor implementations
++    EGLint majorVersion = 0;
++    eglQueryContext(eglGetCurrentDisplay(), eglGetCurrentContext(), EGL_CONTEXT_CLIENT_VERSION, &majorVersion);
++
++    // Make sure read/draw buffer state of default framebuffer is GL_BACK for ES 3.X. Vendor implementations
+     // disagree on the draw/read buffer state if the default framebuffer transitions from a surface
+     // to EGL_NO_SURFACE and vice-versa. There was a related discussion within Khronos on this topic.
+     // See https://cvs.khronos.org/bugzilla/show_bug.cgi?id=13534.
+     // The discussion was not resolved with a clear consensus
+-    if (error == 0 && wasSurfaceless && mEglSurface != EGL_NO_SURFACE) {
++    if (error == 0 && (majorVersion > 2) && wasSurfaceless && mEglSurface != EGL_NO_SURFACE) {
+         GLint curReadFB = 0;
+         GLint curDrawFB = 0;
+         glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &curReadFB);
+-- 
+2.42.0
+

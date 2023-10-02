@@ -1,0 +1,46 @@
+From 78f4b11f60a3eda905791dd095cd555b9c87294e Mon Sep 17 00:00:00 2001
+From: Nicolas Geoffray <ngeoffray@google.com>
+Date: Mon, 11 Jul 2022 14:57:17 +0100
+Subject: [PATCH 33/72] Add a new file for the boot image.
+
+In that file, we can list methods which we want to compile but that our
+boot image profiling implementation did not cover.
+
+Test: m
+Bug: 235557326
+Change-Id: Id5241dac826b5d4f581573d8b9b556bde2dabdeb
+---
+ config/boot-image-profile-extra.txt | 21 +++++++++++++++++++++
+ 1 file changed, 21 insertions(+)
+ create mode 100644 config/boot-image-profile-extra.txt
+
+diff --git a/config/boot-image-profile-extra.txt b/config/boot-image-profile-extra.txt
+new file mode 100644
+index 00000000..e3b187e0
+--- /dev/null
++++ b/config/boot-image-profile-extra.txt
+@@ -0,0 +1,21 @@
++#
++# Copyright (C) 2022 The Android Open Source Project
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#      http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++#
++
++# A list of methods that are found to be latency sensitive. We have this manual
++# due to current limitations of our boot image profiling, where knowing what
++# methods are latency sensitive is difficult. For example, this method is executed
++# in the system server, not on the UI thread of an app.
++HSPLandroid/graphics/Color;->luminance()F
+-- 
+2.42.0
+

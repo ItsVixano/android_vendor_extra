@@ -1,0 +1,88 @@
+From 45c4df9ebeea70af2023abcd0653afa07b8e0cdc Mon Sep 17 00:00:00 2001
+From: qiubowen <qiubowen@xiaomi.com>
+Date: Wed, 28 Sep 2022 19:40:09 +0800
+Subject: [PATCH 15/30] Update concurrent start bytes when app switches from 
+ background to foreground.
+
+When app switches from  background to foreground,  the
+concurrent start bytes value calculated in background is still
+used until a GC occurs. This leads to a GC sooner than desired.
+
+In order to prevent GC from happening too early and affecting
+the hot start, We should update the concurrent start
+bytes promptly when the process state changes
+
+Bug: 249472594
+Test: build
+Signed-off-by: qiubowen <qiubowen@xiaomi.com>
+Change-Id: I3fc6f5362c253af26792703ee38eab64605a80f2
+---
+ runtime/gc/heap.cc | 15 +++++++++++++--
+ runtime/gc/heap.h  |  3 ++-
+ 2 files changed, 15 insertions(+), 3 deletions(-)
+
+diff --git a/runtime/gc/heap.cc b/runtime/gc/heap.cc
+index 70e42edb1c..736a3bd487 100644
+--- a/runtime/gc/heap.cc
++++ b/runtime/gc/heap.cc
+@@ -339,6 +339,7 @@ Heap::Heap(size_t initial_size,
+       // this one.
+       process_state_update_lock_("process state update lock", kPostMonitorLock),
+       min_foreground_target_footprint_(0),
++      min_foreground_concurrent_start_bytes_(0),
+       concurrent_start_bytes_(std::numeric_limits<size_t>::max()),
+       total_bytes_freed_ever_(0),
+       total_objects_freed_ever_(0),
+@@ -1059,7 +1060,9 @@ void Heap::GrowHeapOnJankPerceptibleSwitch() {
+                                               min_foreground_target_footprint_,
+                                               std::memory_order_relaxed);
+   }
+-  min_foreground_target_footprint_ = 0;
++  if (IsGcConcurrent() && concurrent_start_bytes_ < min_foreground_concurrent_start_bytes_) {
++    concurrent_start_bytes_ = min_foreground_concurrent_start_bytes_;
++  }
+ }
+ 
+ void Heap::UpdateProcessState(ProcessState old_process_state, ProcessState new_process_state) {
+@@ -3694,7 +3697,9 @@ void Heap::GrowForUtilization(collector::GarbageCollector* collector_ran,
+     // process-state switch.
+     min_foreground_target_footprint_ =
+         (multiplier <= 1.0 && grow_bytes > 0)
+-        ? bytes_allocated + static_cast<size_t>(grow_bytes * foreground_heap_growth_multiplier_)
++        ? std::min(
++          bytes_allocated + static_cast<size_t>(grow_bytes * foreground_heap_growth_multiplier_),
++          GetMaxMemory())
+         : 0;
+ 
+     if (IsGcConcurrent()) {
+@@ -3726,6 +3731,12 @@ void Heap::GrowForUtilization(collector::GarbageCollector* collector_ran,
+       // allocation rate is very high, remaining_bytes could tell us that we should start a GC
+       // right away.
+       concurrent_start_bytes_ = std::max(target_footprint - remaining_bytes, bytes_allocated);
++      // Store concurrent_start_bytes_ (computed with foreground heap growth multiplier) for update
++      // itself when process state switches to foreground.
++      min_foreground_concurrent_start_bytes_ =
++          min_foreground_target_footprint_ != 0
++          ? std::max(min_foreground_target_footprint_ - remaining_bytes, bytes_allocated)
++          : 0;
+     }
+   }
+ }
+diff --git a/runtime/gc/heap.h b/runtime/gc/heap.h
+index 232c96b914..f347c58f95 100644
+--- a/runtime/gc/heap.h
++++ b/runtime/gc/heap.h
+@@ -1437,8 +1437,9 @@ class Heap {
+ 
+   // Computed with foreground-multiplier in GrowForUtilization() when run in
+   // jank non-perceptible state. On update to process state from background to
+-  // foreground we set target_footprint_ to this value.
++  // foreground we set target_footprint_ and concurrent_start_bytes_ to the corresponding value.
+   size_t min_foreground_target_footprint_ GUARDED_BY(process_state_update_lock_);
++  size_t min_foreground_concurrent_start_bytes_ GUARDED_BY(process_state_update_lock_);
+ 
+   // When num_bytes_allocated_ exceeds this amount then a concurrent GC should be requested so that
+   // it completes ahead of an allocation failing.
+-- 
+2.42.0
+

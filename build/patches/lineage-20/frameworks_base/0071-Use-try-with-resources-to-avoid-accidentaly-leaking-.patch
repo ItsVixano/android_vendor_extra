@@ -1,0 +1,158 @@
+From c26d7a7063d20d1bf1ddcb5c7e566be297fb514f Mon Sep 17 00:00:00 2001
+From: Mateus Azis <azis@google.com>
+Date: Tue, 18 Apr 2023 15:54:19 -0700
+Subject: [PATCH 71/72] Use try-with-resources to avoid accidentaly leaking
+ unclosed objects.
+
+Try-with-resources guarantees that objects will be closed even if an
+exception happens after their creation. It also handles nulls and avoids
+throwing NPE.
+
+Test: built and launched Cuttlefish.
+Change-Id: I30a64f70c862bd75df29a163196232dc89a923a8
+---
+ core/java/android/app/DownloadManager.java    | 18 +++---------------
+ .../android/app/PropertyInvalidatedCache.java | 13 ++++---------
+ core/java/android/app/SearchableInfo.java     | 19 ++++++++++---------
+ .../android/app/SharedPreferencesImpl.java    |  4 +---
+ 4 files changed, 18 insertions(+), 36 deletions(-)
+
+diff --git a/core/java/android/app/DownloadManager.java b/core/java/android/app/DownloadManager.java
+index c209660f..9531cb85 100644
+--- a/core/java/android/app/DownloadManager.java
++++ b/core/java/android/app/DownloadManager.java
+@@ -1198,9 +1198,7 @@ public class DownloadManager {
+     public Uri getUriForDownloadedFile(long id) {
+         // to check if the file is in cache, get its destination from the database
+         Query query = new Query().setFilterById(id);
+-        Cursor cursor = null;
+-        try {
+-            cursor = query(query);
++        try (Cursor cursor = query(query)) {
+             if (cursor == null) {
+                 return null;
+             }
+@@ -1210,10 +1208,6 @@ public class DownloadManager {
+                     return ContentUris.withAppendedId(Downloads.Impl.ALL_DOWNLOADS_CONTENT_URI, id);
+                 }
+             }
+-        } finally {
+-            if (cursor != null) {
+-                cursor.close();
+-            }
+         }
+         // downloaded file not found or its status is not 'successfully completed'
+         return null;
+@@ -1229,19 +1223,13 @@ public class DownloadManager {
+      */
+     public String getMimeTypeForDownloadedFile(long id) {
+         Query query = new Query().setFilterById(id);
+-        Cursor cursor = null;
+-        try {
+-            cursor = query(query);
++        try (Cursor cursor = query(query)) {
+             if (cursor == null) {
+                 return null;
+             }
+-            while (cursor.moveToFirst()) {
++            if (cursor.moveToFirst()) {
+                 return cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_MEDIA_TYPE));
+             }
+-        } finally {
+-            if (cursor != null) {
+-                cursor.close();
+-            }
+         }
+         // downloaded file not found or its status is not 'successfully completed'
+         return null;
+diff --git a/core/java/android/app/PropertyInvalidatedCache.java b/core/java/android/app/PropertyInvalidatedCache.java
+index 27f9f54d..54d4c6e7 100644
+--- a/core/java/android/app/PropertyInvalidatedCache.java
++++ b/core/java/android/app/PropertyInvalidatedCache.java
+@@ -29,10 +29,7 @@ import android.text.TextUtils;
+ import android.util.Log;
+ 
+ import com.android.internal.annotations.GuardedBy;
+-import com.android.internal.util.FastPrintWriter;
+ 
+-import java.lang.annotation.Retention;
+-import java.lang.annotation.RetentionPolicy;
+ import java.io.ByteArrayOutputStream;
+ import java.io.FileOutputStream;
+ import java.io.IOException;
+@@ -1603,15 +1600,13 @@ public class PropertyInvalidatedCache<Query, Result> {
+         // to the caller after all the data has been collected and all locks have been
+         // released.
+         ByteArrayOutputStream barray = new ByteArrayOutputStream();
+-        PrintWriter bout = new PrintWriter(barray);
+-        dumpCacheInfo(bout, args);
+-        bout.close();
++        try (PrintWriter bout = new PrintWriter(barray)) {
++            dumpCacheInfo(bout, args);
++        }
+ 
+-        try {
++        try (var out = new FileOutputStream(pfd.getFileDescriptor())) {
+             // Send the final byte array to the output.  This happens outside of all locks.
+-            var out = new FileOutputStream(pfd.getFileDescriptor());
+             barray.writeTo(out);
+-            out.close();
+             barray.close();
+         } catch (IOException e) {
+             Log.e(TAG, "Failed to dump PropertyInvalidatedCache instances");
+diff --git a/core/java/android/app/SearchableInfo.java b/core/java/android/app/SearchableInfo.java
+index 5388282a..f2358f36 100644
+--- a/core/java/android/app/SearchableInfo.java
++++ b/core/java/android/app/SearchableInfo.java
+@@ -533,16 +533,17 @@ public final class SearchableInfo implements Parcelable {
+             return null;
+         }
+         // for each component, try to find metadata
+-        XmlResourceParser xml = 
+-                activityInfo.loadXmlMetaData(userContext.getPackageManager(), MD_LABEL_SEARCHABLE);
+-        if (xml == null) {
+-            return null;
++        SearchableInfo searchable;
++        try (XmlResourceParser xml = activityInfo.loadXmlMetaData(userContext.getPackageManager(),
++                MD_LABEL_SEARCHABLE)) {
++            if (xml == null) {
++                return null;
++            }
++            ComponentName cName = new ComponentName(activityInfo.packageName, activityInfo.name);
++
++            searchable = getActivityMetaData(userContext, xml, cName);
+         }
+-        ComponentName cName = new ComponentName(activityInfo.packageName, activityInfo.name);
+-        
+-        SearchableInfo searchable = getActivityMetaData(userContext, xml, cName);
+-        xml.close();
+-        
++
+         if (DBG) {
+             if (searchable != null) {
+                 Log.d(LOG_TAG, "Checked " + activityInfo.name
+diff --git a/core/java/android/app/SharedPreferencesImpl.java b/core/java/android/app/SharedPreferencesImpl.java
+index 1ebf5655..4356683e 100644
+--- a/core/java/android/app/SharedPreferencesImpl.java
++++ b/core/java/android/app/SharedPreferencesImpl.java
+@@ -789,8 +789,7 @@ final class SharedPreferencesImpl implements SharedPreferences {
+         // Attempt to write the file, delete the backup and return true as atomically as
+         // possible.  If any exception occurs, delete the new file; next time we will restore
+         // from the backup.
+-        try {
+-            FileOutputStream str = createFileOutputStream(mFile);
++        try (FileOutputStream str = createFileOutputStream(mFile)) {
+ 
+             if (DEBUG) {
+                 outputStreamCreateTime = System.currentTimeMillis();
+@@ -808,7 +807,6 @@ final class SharedPreferencesImpl implements SharedPreferences {
+ 
+             fsyncTime = System.currentTimeMillis();
+ 
+-            str.close();
+             ContextImpl.setFilePermissionsFromMode(mFile.getPath(), mMode, 0);
+ 
+             if (DEBUG) {
+-- 
+2.42.0
+

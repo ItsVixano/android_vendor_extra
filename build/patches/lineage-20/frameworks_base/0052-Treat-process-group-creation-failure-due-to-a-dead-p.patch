@@ -1,0 +1,51 @@
+From 1dd2621b8e86ffb75758109a41ebadd3e7aa903f Mon Sep 17 00:00:00 2001
+From: Suren Baghdasaryan <surenb@google.com>
+Date: Thu, 2 Mar 2023 15:39:16 -0800
+Subject: [PATCH 52/72] Treat process group creation failure due to a dead
+ process as non-fatal
+
+Failure by Zygote to create a process group for newly spawned child is
+treated as a fatal error. This is done to avoid leaving children in
+Zygote's process group because such relationship can lead to
+side-effects, like freezing Zygote when the child's group is being
+frozen.
+However, if the child died before it could be added into a process
+group, there is not danger of leaving it in Zygote's group, therefore
+such failure does not have to be fatal and crash system_server.
+Check for this situation and when createProcessGroup() fails because
+the child is dead, just log the error and keep going.
+
+Bug: 270103958
+Change-Id: I6646fbb85162da9087a9e3d7699ef081de277fca
+Signed-off-by: Suren Baghdasaryan <surenb@google.com>
+---
+ core/jni/com_android_internal_os_Zygote.cpp | 13 +++++++++----
+ 1 file changed, 9 insertions(+), 4 deletions(-)
+
+diff --git a/core/jni/com_android_internal_os_Zygote.cpp b/core/jni/com_android_internal_os_Zygote.cpp
+index 5d9fadab..c5167fd4 100644
+--- a/core/jni/com_android_internal_os_Zygote.cpp
++++ b/core/jni/com_android_internal_os_Zygote.cpp
+@@ -1788,10 +1788,15 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids,
+     if (!is_system_server && getuid() == 0) {
+         const int rc = createProcessGroup(uid, getpid());
+         if (rc != 0) {
+-            fail_fn(rc == -EROFS ? CREATE_ERROR("createProcessGroup failed, kernel missing "
+-                                                "CONFIG_CGROUP_CPUACCT?")
+-                                 : CREATE_ERROR("createProcessGroup(%d, %d) failed: %s", uid,
+-                                                /* pid= */ 0, strerror(-rc)));
++            if (rc == -ESRCH) {
++                // If process is dead, treat this as a non-fatal error
++                ALOGE("createProcessGroup(%d, %d) failed: %s", uid, /* pid= */ 0, strerror(-rc));
++            } else {
++                fail_fn(rc == -EROFS ? CREATE_ERROR("createProcessGroup failed, kernel missing "
++                                                    "CONFIG_CGROUP_CPUACCT?")
++                                     : CREATE_ERROR("createProcessGroup(%d, %d) failed: %s", uid,
++                                                    /* pid= */ 0, strerror(-rc)));
++            }
+         }
+     }
+ 
+-- 
+2.42.0
+

@@ -1,0 +1,47 @@
+From a5694e523fa3f6de7e58b6db1bd2cc4c9a72a0c3 Mon Sep 17 00:00:00 2001
+From: "gang.huang" <gang.huang@unisoc.com>
+Date: Sat, 11 Mar 2023 00:13:36 +0800
+Subject: [PATCH 53/72] When the sharedUserSetting of the application on
+ /system is different from the sharedUserSetting on /data, we should trust the
+ sharedUserSetting on /system
+
+A new system app appeared by OTA, but we already had a non-system one of the same name installed earlier, if the the sharedUserSetting of the application on /system is different from
+the sharedUserSetting on /data, and the version on system is smaller than the version on /data, the OTA upgrade will fail.
+
+Bug: 272714709
+
+Test: Manual.
+Test: 1] installed an application A on /data
+Test: 2] in OTA target package preload an application B on /system.
+         which has the same package name and signature with A,
+         but the sharedUserSetting of the application on /system
+         is different from the sharedUserSetting on /data
+Test: 3] OTA upgrade
+Change-Id: I21b0c24ae363ff6be06dcd0f187273200b2991a6
+---
+ .../java/com/android/server/pm/InstallPackageHelper.java    | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/services/core/java/com/android/server/pm/InstallPackageHelper.java b/services/core/java/com/android/server/pm/InstallPackageHelper.java
+index 25970116..cbb1afb1 100644
+--- a/services/core/java/com/android/server/pm/InstallPackageHelper.java
++++ b/services/core/java/com/android/server/pm/InstallPackageHelper.java
+@@ -3974,10 +3974,14 @@ final class InstallPackageHelper {
+                     deletePackageHelper.deletePackageLIF(parsedPackage.getPackageName(), null, true,
+                             mPm.mUserManager.getUserIds(), 0, null, false);
+                 }
+-            } else if (newPkgVersionGreater) {
++            } else if (newPkgVersionGreater || newSharedUserSetting) {
+                 // The application on /system is newer than the application on /data.
+                 // Simply remove the application on /data [keeping application data]
+                 // and replace it with the version on /system.
++                // Also, if the sharedUserSetting of the application on /system is different
++                // from the sharedUserSetting on data, we should trust the sharedUserSetting
++                // on /system, even if the application version on /system is smaller than
++                // the version on /data.
+                 logCriticalInfo(Log.WARN,
+                         "System package enabled;"
+                                 + " name: " + pkgSetting.getPackageName()
+-- 
+2.42.0
+

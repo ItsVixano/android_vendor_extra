@@ -1,0 +1,100 @@
+From c1d703669f71b1ed754aa4e24be6e500068b1480 Mon Sep 17 00:00:00 2001
+From: Vladimir Marko <vmarko@google.com>
+Date: Thu, 13 Oct 2022 16:52:18 +0200
+Subject: [PATCH 13/30] ART: Add regression test for obsolete crash.
+
+Add a regression test for a `StringBuilderAppend` pattern
+recognition crash in debug mode that we had while we were
+inlining the `StringBuilder` constructor. As we no longer
+inline this constructor, we do not encounter the bug.
+
+Test: testrunner.py --target -t 639-checker-code-sinking
+Test: Repeat on an older tree to see the crash - before
+      https://android-review.googlesource.com/2230607 .
+Bug: 252799691
+Change-Id: I8eaf9294f8b90fe7cedbe79ffd99394f79d43943
+---
+ test/639-checker-code-sinking/src/Main.java | 54 +++++++++++++++++++++
+ 1 file changed, 54 insertions(+)
+
+diff --git a/test/639-checker-code-sinking/src/Main.java b/test/639-checker-code-sinking/src/Main.java
+index 5e465f2716..27df41f7b4 100644
+--- a/test/639-checker-code-sinking/src/Main.java
++++ b/test/639-checker-code-sinking/src/Main.java
+@@ -27,6 +27,7 @@ public class Main {
+     testPhiInput();
+     testVolatileStore();
+     testCatchBlock();
++    $noinline$testTwoThrowingPathsAndStringBuilderAppend();
+     doThrow = true;
+     try {
+       testInstanceSideEffects();
+@@ -687,12 +688,65 @@ public class Main {
+     return x;
+   }
+ 
++  private static void $noinline$testTwoThrowingPathsAndStringBuilderAppend() {
++    try {
++      $noinline$twoThrowingPathsAndStringBuilderAppend(null);
++      throw new Error("Unreachable");
++    } catch (Error expected) {
++      assertEquals("Object is null", expected.getMessage());
++    }
++    try {
++      $noinline$twoThrowingPathsAndStringBuilderAppend(new Object());
++      throw new Error("Unreachable");
++    } catch (Error expected) {
++      assertEquals("s1s2", expected.getMessage());
++    }
++  }
++
++  // We currently do not inline the `StringBuilder` constructor.
++  // When we did, the `StringBuilderAppend` pattern recognition was looking for
++  // the inlined `NewArray` (and its associated `LoadClass`) and checked in
++  // debug build that the `StringBuilder` has an environment use from this
++  // `NewArray` (and maybe from `LoadClass`). However, code sinking was pruning
++  // the environment of the `NewArray`, leading to a crash when compiling the
++  // code below on the device (we do not inline `core-oj` on host). b/252799691
++  private static void $noinline$twoThrowingPathsAndStringBuilderAppend(Object o) {
++    String s1 = "s1";
++    String s2 = "s2";
++    StringBuilder sb = new StringBuilder();
++
++    // Before inlining, the environment use from this invoke prevents the
++    // `StringBuilderAppend` pattern recognition. After inlining, we end up
++    // with two paths ending with a `Throw` and we could sink the `sb`
++    // instructions from above down to those below, enabling the
++    // `StringBuilderAppend` pattern recognition.
++    // (But that does not happen when the `StringBuilder` constructor is
++    // not inlined, see above.)
++    $inline$requireNonNull(o);
++
++    String s1s2 = sb.append(s1).append(s2).toString();
++    sb = null;
++    throw new Error(s1s2);
++  }
++
++  private static void $inline$requireNonNull(Object o) {
++    if (o == null) {
++      throw new Error("Object is null");
++    }
++  }
++
+   private static void assertEquals(int expected, int actual) {
+     if (expected != actual) {
+       throw new AssertionError("Expected: " + expected + ", Actual: " + actual);
+     }
+   }
+ 
++  private static void assertEquals(String expected, String actual) {
++    if (!expected.equals(actual)) {
++      throw new AssertionError("Expected: " + expected + ", Actual: " + actual);
++    }
++  }
++
+   volatile int volatileField;
+   int intField;
+   int intField2;
+-- 
+2.42.0
+

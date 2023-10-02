@@ -1,0 +1,149 @@
+From 32aa3d06d4520ad3e5a72481869fcc779661e57e Mon Sep 17 00:00:00 2001
+From: Nicolas Geoffray <ngeoffray@google.com>
+Date: Wed, 3 Aug 2022 22:53:45 +0100
+Subject: [PATCH 17/30] For cortex-a75/a55 validate features with hwcaps.
+
+Pixel3a is wrongly reporting as cortex-a75, it should report kryo360
+instead.
+
+Test: ART module on pixel3a
+Bug: 241290778
+Change-Id: I97e99192298becdf2af6f28e2e31b510f722c4e1
+---
+ compiler/jit/jit_compiler.cc                  |  2 +-
+ dex2oat/dex2oat.cc                            |  9 +++++--
+ .../arm64/instruction_set_features_arm64.cc   | 12 +++++++++
+ .../arm64/instruction_set_features_arm64.h    |  4 +++
+ runtime/arch/instruction_set_features.cc      | 27 +++++++++++++++++++
+ runtime/arch/instruction_set_features.h       |  6 +++++
+ 6 files changed, 57 insertions(+), 3 deletions(-)
+
+diff --git a/compiler/jit/jit_compiler.cc b/compiler/jit/jit_compiler.cc
+index 7002636d4e..e578d3bf7f 100644
+--- a/compiler/jit/jit_compiler.cc
++++ b/compiler/jit/jit_compiler.cc
+@@ -85,7 +85,7 @@ void JitCompiler::ParseCompilerOptions() {
+     if (StartsWith(option, "--instruction-set-variant=")) {
+       const char* str = option.c_str() + strlen("--instruction-set-variant=");
+       VLOG(compiler) << "JIT instruction set variant " << str;
+-      instruction_set_features = InstructionSetFeatures::FromVariant(
++      instruction_set_features = InstructionSetFeatures::FromVariantAndHwcap(
+           instruction_set, str, &error_msg);
+       if (instruction_set_features == nullptr) {
+         LOG(WARNING) << "Error parsing " << option << " message=" << error_msg;
+diff --git a/dex2oat/dex2oat.cc b/dex2oat/dex2oat.cc
+index 9e6103b424..27bae654c3 100644
+--- a/dex2oat/dex2oat.cc
++++ b/dex2oat/dex2oat.cc
+@@ -607,8 +607,13 @@ class Dex2Oat final {
+   }
+ 
+   void ParseInstructionSetVariant(const std::string& option, ParserOptions* parser_options) {
+-    compiler_options_->instruction_set_features_ = InstructionSetFeatures::FromVariant(
+-        compiler_options_->instruction_set_, option, &parser_options->error_msg);
++    if (kIsTargetBuild) {
++      compiler_options_->instruction_set_features_ = InstructionSetFeatures::FromVariantAndHwcap(
++          compiler_options_->instruction_set_, option, &parser_options->error_msg);
++    } else {
++      compiler_options_->instruction_set_features_ = InstructionSetFeatures::FromVariant(
++          compiler_options_->instruction_set_, option, &parser_options->error_msg);
++    }
+     if (compiler_options_->instruction_set_features_ == nullptr) {
+       Usage("%s", parser_options->error_msg.c_str());
+     }
+diff --git a/runtime/arch/arm64/instruction_set_features_arm64.cc b/runtime/arch/arm64/instruction_set_features_arm64.cc
+index ad082aed1f..93400d9c7c 100644
+--- a/runtime/arch/arm64/instruction_set_features_arm64.cc
++++ b/runtime/arch/arm64/instruction_set_features_arm64.cc
+@@ -171,6 +171,18 @@ Arm64FeaturesUniquePtr Arm64InstructionSetFeatures::FromVariant(
+                                                                 has_sve));
+ }
+ 
++Arm64FeaturesUniquePtr Arm64InstructionSetFeatures::IntersectWithHwcap() const {
++  Arm64FeaturesUniquePtr hwcaps = Arm64InstructionSetFeatures::FromHwcap();
++  return Arm64FeaturesUniquePtr(new Arm64InstructionSetFeatures(
++      fix_cortex_a53_835769_,
++      fix_cortex_a53_843419_,
++      has_crc_ && hwcaps->has_crc_,
++      has_lse_ && hwcaps->has_lse_,
++      has_fp16_ && hwcaps->has_fp16_,
++      has_dotprod_ && hwcaps->has_dotprod_,
++      has_sve_ && hwcaps->has_sve_));
++}
++
+ Arm64FeaturesUniquePtr Arm64InstructionSetFeatures::FromBitmap(uint32_t bitmap) {
+   bool is_a53 = (bitmap & kA53Bitfield) != 0;
+   bool has_crc = (bitmap & kCRCBitField) != 0;
+diff --git a/runtime/arch/arm64/instruction_set_features_arm64.h b/runtime/arch/arm64/instruction_set_features_arm64.h
+index eb98c01633..8f0013ac86 100644
+--- a/runtime/arch/arm64/instruction_set_features_arm64.h
++++ b/runtime/arch/arm64/instruction_set_features_arm64.h
+@@ -53,6 +53,10 @@ class Arm64InstructionSetFeatures final : public InstructionSetFeatures {
+   // Use external cpu_features library.
+   static Arm64FeaturesUniquePtr FromCpuFeatures();
+ 
++  // Return a new set of instruction set features, intersecting `this` features
++  // with hardware capabilities.
++  Arm64FeaturesUniquePtr IntersectWithHwcap() const;
++
+   bool Equals(const InstructionSetFeatures* other) const override;
+ 
+   // Note that newer CPUs do not have a53 erratum 835769 and 843419,
+diff --git a/runtime/arch/instruction_set_features.cc b/runtime/arch/instruction_set_features.cc
+index ec1e340245..7a1e6b05ad 100644
+--- a/runtime/arch/instruction_set_features.cc
++++ b/runtime/arch/instruction_set_features.cc
+@@ -53,6 +53,33 @@ std::unique_ptr<const InstructionSetFeatures> InstructionSetFeatures::FromVarian
+   UNREACHABLE();
+ }
+ 
++std::unique_ptr<const InstructionSetFeatures> InstructionSetFeatures::FromVariantAndHwcap(
++    InstructionSet isa, const std::string& variant, std::string* error_msg) {
++  auto variant_features = FromVariant(isa, variant, error_msg);
++  if (variant_features == nullptr) {
++    return nullptr;
++  }
++  // Pixel3a is wrongly reporting itself as cortex-a75, so validate the features
++  // with hwcaps.
++  // Note that when cross-compiling on device (using dex2oat32 for compiling
++  // arm64), the hwcaps will report that no feature is supported. This is
++  // currently our best approach to be safe/correct. Maybe using the
++  // cpu_features library could fix this issue.
++  if (isa == InstructionSet::kArm64) {
++    auto new_features = down_cast<const Arm64InstructionSetFeatures*>(variant_features.get())
++        ->IntersectWithHwcap();
++    if (!variant_features->Equals(new_features.get())) {
++      LOG(WARNING) << "Mismatch between instruction set variant of device ("
++            << *variant_features
++            << ") and features returned by the hardware (" << *new_features << ")";
++    }
++    return new_features;
++  } else {
++    // TODO: Implement this validation on all architectures.
++    return variant_features;
++  }
++}
++
+ std::unique_ptr<const InstructionSetFeatures> InstructionSetFeatures::FromBitmap(InstructionSet isa,
+                                                                                  uint32_t bitmap) {
+   std::unique_ptr<const InstructionSetFeatures> result;
+diff --git a/runtime/arch/instruction_set_features.h b/runtime/arch/instruction_set_features.h
+index b80d36f153..cee8c5d42f 100644
+--- a/runtime/arch/instruction_set_features.h
++++ b/runtime/arch/instruction_set_features.h
+@@ -39,6 +39,12 @@ class InstructionSetFeatures {
+                                                                    const std::string& variant,
+                                                                    std::string* error_msg);
+ 
++  // Process a CPU variant string for the given ISA and make sure the features advertised
++  // are supported by the hardware. This is needed for Pixel3a which wrongly
++  // reports itself as cortex-a75.
++  static std::unique_ptr<const InstructionSetFeatures> FromVariantAndHwcap(
++      InstructionSet isa, const std::string& variant, std::string* error_msg);
++
+   // Parse a bitmap for the given isa and create an InstructionSetFeatures.
+   static std::unique_ptr<const InstructionSetFeatures> FromBitmap(InstructionSet isa,
+                                                                   uint32_t bitmap);
+-- 
+2.42.0
+

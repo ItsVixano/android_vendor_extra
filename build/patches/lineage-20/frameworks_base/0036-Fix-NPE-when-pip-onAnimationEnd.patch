@@ -1,0 +1,28 @@
+From 6e255ee20a29ae287a57f8b6b4fd8fbd6ff61bd0 Mon Sep 17 00:00:00 2001
+From: wangdongdong6 <wangdongdong6@xiaomi.corp-partner.google.com>
+Date: Sat, 8 Oct 2022 15:58:32 +0800
+Subject: [PATCH 36/72] Fix NPE when pip onAnimationEnd
+
+issue: 252105539
+
+Signed-off-by: wangdongdong6 <wangdongdong6@xiaomi.corp-partner.google.com>
+Change-Id: Id577190f8a50e0ee447bad97f631ae194ad47f2c
+---
+ .../src/com/android/wm/shell/splitscreen/StageCoordinator.java   | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/libs/WindowManager/Shell/src/com/android/wm/shell/splitscreen/StageCoordinator.java b/libs/WindowManager/Shell/src/com/android/wm/shell/splitscreen/StageCoordinator.java
+index fbeff255..797ab9d0 100644
+--- a/libs/WindowManager/Shell/src/com/android/wm/shell/splitscreen/StageCoordinator.java
++++ b/libs/WindowManager/Shell/src/com/android/wm/shell/splitscreen/StageCoordinator.java
+@@ -1466,6 +1466,7 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
+     }
+ 
+     void getStageBounds(Rect outTopOrLeftBounds, Rect outBottomOrRightBounds) {
++        if (mSplitLayout == null) return;
+         outTopOrLeftBounds.set(mSplitLayout.getBounds1());
+         outBottomOrRightBounds.set(mSplitLayout.getBounds2());
+     }
+-- 
+2.42.0
+

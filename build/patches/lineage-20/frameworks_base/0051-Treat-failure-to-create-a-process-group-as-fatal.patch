@@ -1,0 +1,63 @@
+From 77506e806189d223acf9dcfead0d1668773f3a66 Mon Sep 17 00:00:00 2001
+From: Suren Baghdasaryan <surenb@google.com>
+Date: Fri, 1 Apr 2022 10:49:01 -0700
+Subject: [PATCH 51/72] Treat failure to create a process group as fatal
+
+During process startup, system creates a process group and places the
+new process in it. If process group creation fails for some reason, the
+new child process will stay in its parent's group. This poses danger
+when the child is being frozen because the whole group is affected and
+its parent is being frozen as well. Considering that the parent of an
+app is Zygote, freezing it leads to the device becoming unusable.
+Fix this by treating group creation failure as a fatal error which would
+prevent the app from starting. When system_server fails to create a
+process group, it will throw an exception that's not caught and will
+self-destruct.
+
+Bug: 227395690
+Test: fake group creation failure and confirm app failure to start
+Signed-off-by: Suren Baghdasaryan <surenb@google.com>
+Change-Id: Ib34b4a100c65a9a2705aaef8e7e32322fbedc531
+---
+ core/jni/com_android_internal_os_Zygote.cpp              | 9 +++++----
+ .../core/java/com/android/server/am/ProcessList.java     | 4 ++--
+ 2 files changed, 7 insertions(+), 6 deletions(-)
+
+diff --git a/core/jni/com_android_internal_os_Zygote.cpp b/core/jni/com_android_internal_os_Zygote.cpp
+index 6e2ea356..5d9fadab 100644
+--- a/core/jni/com_android_internal_os_Zygote.cpp
++++ b/core/jni/com_android_internal_os_Zygote.cpp
+@@ -1787,10 +1787,11 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids,
+     // since the directory is owned by root.
+     if (!is_system_server && getuid() == 0) {
+         const int rc = createProcessGroup(uid, getpid());
+-        if (rc == -EROFS) {
+-            ALOGW("createProcessGroup failed, kernel missing CONFIG_CGROUP_CPUACCT?");
+-        } else if (rc != 0) {
+-            ALOGE("createProcessGroup(%d, %d) failed: %s", uid, /* pid= */ 0, strerror(-rc));
++        if (rc != 0) {
++            fail_fn(rc == -EROFS ? CREATE_ERROR("createProcessGroup failed, kernel missing "
++                                                "CONFIG_CGROUP_CPUACCT?")
++                                 : CREATE_ERROR("createProcessGroup(%d, %d) failed: %s", uid,
++                                                /* pid= */ 0, strerror(-rc)));
+         }
+     }
+ 
+diff --git a/services/core/java/com/android/server/am/ProcessList.java b/services/core/java/com/android/server/am/ProcessList.java
+index f3ff8ec1..efbac873 100644
+--- a/services/core/java/com/android/server/am/ProcessList.java
++++ b/services/core/java/com/android/server/am/ProcessList.java
+@@ -2327,8 +2327,8 @@ public final class ProcessList {
+             if (!regularZygote) {
+                 // webview and app zygote don't have the permission to create the nodes
+                 if (Process.createProcessGroup(uid, startResult.pid) < 0) {
+-                    Slog.e(ActivityManagerService.TAG, "Unable to create process group for "
+-                            + app.processName + " (" + startResult.pid + ")");
++                    throw new AssertionError("Unable to create process group for " + app.processName
++                            + " (" + startResult.pid + ")");
+                 }
+             }
+ 
+-- 
+2.42.0
+

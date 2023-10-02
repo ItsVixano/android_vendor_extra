@@ -1,0 +1,55 @@
+From 10dd56a27644e274d2b62eb2160015d2be8980a3 Mon Sep 17 00:00:00 2001
+From: XeonDead <xeondead@gmail.com>
+Date: Thu, 6 Oct 2022 13:46:26 +0300
+Subject: [PATCH 19/30] ART: dex2oat and instruction_set_features: utilize
+ modified runtime capabilities set
+
+For some time, it bothered me that the device is actively trying to target different to known cpudefines set.
+When inspecting clang's defines system, it occured to me that when we're supplying mcpu and march, the gaps aren't filled to their fullest.
+e.g. march=armv8.2-a mcpu=cortex-a55 would skip over the fact that CPU supports fp16, lse, dotprod etc.
+     ^ AOSP default(!)
+
+Let's instead depend on hwcaps intersected with CPP defines - that way, we can at least presume the target system, with actually supplied hwcaps being the preference in order to accomplish the result of optimizing for the actual hardware at use.
+ARM64 only, but I don't think the problem is as severe on anything else.
+
+Change-Id: I1f631c4e3ae1b42f7e4fc0aedf5d642186c734db
+Signed-off-by: XeonDead <xeondead@gmail.com>
+---
+ dex2oat/dex2oat.cc                       | 7 +++++++
+ runtime/arch/instruction_set_features.cc | 2 +-
+ 2 files changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/dex2oat/dex2oat.cc b/dex2oat/dex2oat.cc
+index 27bae654c3..85a06b6d00 100644
+--- a/dex2oat/dex2oat.cc
++++ b/dex2oat/dex2oat.cc
+@@ -816,6 +816,13 @@ class Dex2Oat final {
+     if (compiler_options_->instruction_set_ == kRuntimeISA) {
+       std::unique_ptr<const InstructionSetFeatures> runtime_features(
+           InstructionSetFeatures::FromCppDefines());
++      if (kRuntimeISA == InstructionSet::kArm64) {
++         std::unique_ptr<const InstructionSetFeatures> arm64_runtime_features(
++             InstructionSetFeatures::FromRuntimeDetection());
++         if (arm64_runtime_features != nullptr) {
++           runtime_features = std::move(arm64_runtime_features);
++         }
++      }
+       if (!compiler_options_->GetInstructionSetFeatures()->Equals(runtime_features.get())) {
+         LOG(WARNING) << "Mismatch between dex2oat instruction set features to use ("
+             << *compiler_options_->GetInstructionSetFeatures()
+diff --git a/runtime/arch/instruction_set_features.cc b/runtime/arch/instruction_set_features.cc
+index 7a1e6b05ad..36366b8679 100644
+--- a/runtime/arch/instruction_set_features.cc
++++ b/runtime/arch/instruction_set_features.cc
+@@ -129,7 +129,7 @@ std::unique_ptr<const InstructionSetFeatures> InstructionSetFeatures::FromRuntim
+   switch (kRuntimeISA) {
+ #ifdef ART_TARGET_ANDROID
+     case InstructionSet::kArm64:
+-      return Arm64InstructionSetFeatures::FromHwcap();
++      return Arm64InstructionSetFeatures::FromHwcap()->IntersectWithHwcap();
+ #endif
+     default:
+       return nullptr;
+-- 
+2.42.0
+

@@ -1,0 +1,41 @@
+From 37682b7c980629abc29584c8bcd85942edeea140 Mon Sep 17 00:00:00 2001
+From: guolun Xue <xueguolun@xiaomi.corp-partner.google.com>
+Date: Fri, 25 Nov 2022 06:39:54 +0000
+Subject: [PATCH 54/72] use max_adj to control process final adj
+
+when app have flag BIND_ABOVE_CLIENT, max adj will be unuseful
+system can not limit process adj through max adj, this happen
+frequently in various app
+
+Bug: 262672210
+
+Change-Id: I5fa9ea8f573b41899f1e78f8f3fd57aa687b4b12
+---
+ services/core/java/com/android/server/am/OomAdjuster.java | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/services/core/java/com/android/server/am/OomAdjuster.java b/services/core/java/com/android/server/am/OomAdjuster.java
+index 441506d1..54718c9b 100644
+--- a/services/core/java/com/android/server/am/OomAdjuster.java
++++ b/services/core/java/com/android/server/am/OomAdjuster.java
+@@ -2457,7 +2457,7 @@ public class OomAdjuster {
+         }
+ 
+         state.setCurRawAdj(adj);
+-
++        adj = psr.modifyRawOomAdj(adj);
+         if (adj > state.getMaxAdj()) {
+             adj = state.getMaxAdj();
+             if (adj <= ProcessList.PERCEPTIBLE_LOW_APP_ADJ) {
+@@ -2487,7 +2487,7 @@ public class OomAdjuster {
+         // it when computing the final cached adj later.  Note that we don't need to
+         // worry about this for max adj above, since max adj will always be used to
+         // keep it out of the cached vaues.
+-        state.setCurAdj(psr.modifyRawOomAdj(adj));
++        state.setCurAdj(adj);
+         state.setCurCapability(capability);
+         state.setCurrentSchedulingGroup(schedGroup);
+         state.setCurProcState(procState);
+-- 
+2.42.0
+

@@ -1,0 +1,34 @@
+From 180bdf9c23e3b421d7405d40458d1f4a74c2f735 Mon Sep 17 00:00:00 2001
+From: Yi Kong <yikong@google.com>
+Date: Wed, 22 Mar 2023 17:09:50 +0900
+Subject: [PATCH 58/72] Opt libhwui out of -fprofile-sample-accurate
+
+Some hwui code paths might be infrequently executed but critical to the
+UI latency. Opt out of -fprofile-sample-accurate so that the compiler
+won't de-optimise cold code paths.
+
+Test: presubmit
+Bug: 273415627
+Change-Id: Ieaf34fc0d2e75aa54c46fec0fde38cee42a5c3c3
+---
+ libs/hwui/Android.bp | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/libs/hwui/Android.bp b/libs/hwui/Android.bp
+index 33f79352..74f4a763 100644
+--- a/libs/hwui/Android.bp
++++ b/libs/hwui/Android.bp
+@@ -55,6 +55,10 @@ cc_defaults {
+         // GCC false-positives on this warning, and since we -Werror that's
+         // a problem
+         "-Wno-free-nonheap-object",
++
++        // Do not de-optimise cold code paths in AFDO.
++        // Some code paths might be infrequently executed but critical to latency.
++        "-fno-profile-sample-accurate",
+     ],
+ 
+     include_dirs: [
+-- 
+2.42.0
+

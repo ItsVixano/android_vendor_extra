@@ -1,0 +1,36 @@
+From aea83b9f456fa3d5d77065ae0127c0c7815a5674 Mon Sep 17 00:00:00 2001
+From: "pioush.kumar-IN009423" <pioush.kumar@oppo.com>
+Date: Tue, 28 Feb 2023 18:11:28 +0530
+Subject: [PATCH 40/72] Touch is not working
+
+Problem: {
+    1. Sometime ActivityRecordInputSink does not move to the same display as like it's parent ActivityRecord
+    2. Due to which touch events does not work for the device
+}
+
+Solution: {
+    1. During onDisplayChanged update the ActivityRecordInputSink's inputHandle's display ID
+}
+
+Bug: 268301238
+Signed-off-by: pioush.kumar-IN009423 <pioush.kumar@oppo.com>
+Change-Id: Ia0361fd98e9ff7128153ff664825fd62c5ca6258
+---
+ .../core/java/com/android/server/wm/ActivityRecordInputSink.java | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/services/core/java/com/android/server/wm/ActivityRecordInputSink.java b/services/core/java/com/android/server/wm/ActivityRecordInputSink.java
+index 5d038dca..be7d9b63 100644
+--- a/services/core/java/com/android/server/wm/ActivityRecordInputSink.java
++++ b/services/core/java/com/android/server/wm/ActivityRecordInputSink.java
+@@ -92,6 +92,7 @@ class ActivityRecordInputSink {
+         } else {
+             mInputWindowHandleWrapper.setInputConfigMasked(0, InputConfig.NOT_TOUCHABLE);
+         }
++        mInputWindowHandleWrapper.setDisplayId(mActivityRecord.getDisplayId());
+         return mInputWindowHandleWrapper;
+     }
+ 
+-- 
+2.42.0
+

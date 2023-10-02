@@ -1,0 +1,40 @@
+From f1c953224d059380a7f343a828d14b06dfa9257d Mon Sep 17 00:00:00 2001
+From: Jake Weinstein <xboxlover360@gmail.com>
+Date: Thu, 13 Oct 2016 23:56:02 -0400
+Subject: [PATCH 62/72] base: set scrolling friction to 0.006f
+
+Improves responsiveness
+
+Change-Id: I18a52ac84ba9c8274adc757e41ca2ca995d514f6
+---
+ core/java/android/widget/AbsListView.java | 1 +
+ core/java/android/widget/ScrollView.java  | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/core/java/android/widget/AbsListView.java b/core/java/android/widget/AbsListView.java
+index 20333f72..3bca7f39 100644
+--- a/core/java/android/widget/AbsListView.java
++++ b/core/java/android/widget/AbsListView.java
+@@ -4824,6 +4824,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
+ 
+         FlingRunnable() {
+             mScroller = new OverScroller(getContext());
++            mScroller.setFriction(0.006f);
+         }
+ 
+         // Use AbsListView#fling(int) instead
+diff --git a/core/java/android/widget/ScrollView.java b/core/java/android/widget/ScrollView.java
+index 15cd17b2..e3e86974 100644
+--- a/core/java/android/widget/ScrollView.java
++++ b/core/java/android/widget/ScrollView.java
+@@ -349,6 +349,7 @@ public class ScrollView extends FrameLayout {
+ 
+     private void initScrollView() {
+         mScroller = new OverScroller(getContext());
++        mScroller.setFriction(0.006f);
+         setFocusable(true);
+         setDescendantFocusability(FOCUS_AFTER_DESCENDANTS);
+         setWillNotDraw(false);
+-- 
+2.42.0
+

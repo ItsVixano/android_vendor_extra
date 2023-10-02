@@ -1,0 +1,30 @@
+From bb41ebb47411af9fdb2750192ffffecf1ac68da9 Mon Sep 17 00:00:00 2001
+From: Nicolas Geoffray <ngeoffray@google.com>
+Date: Thu, 25 May 2023 14:24:06 +0100
+Subject: [PATCH 30/30] Adjust jit warmup threshold.
+
+Improves 95th percentile of frame rendering in the first 20 seconds of a
+compose app.
+
+Test: launch compose app, swipe for 20 seconds.
+Change-Id: Ie3ff2fa7d860c0402914884363f5517b75139387
+---
+ runtime/jit/jit.cc | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/runtime/jit/jit.cc b/runtime/jit/jit.cc
+index 81d074d9d5..017ae10478 100644
+--- a/runtime/jit/jit.cc
++++ b/runtime/jit/jit.cc
+@@ -71,7 +71,7 @@ static constexpr uint32_t kJitStressDefaultOptimizeThreshold = kJitDefaultOptimi
+ static constexpr uint32_t kJitSlowStressDefaultOptimizeThreshold =
+     kJitStressDefaultOptimizeThreshold / 2;
+ 
+-static constexpr uint32_t kJitDefaultWarmupThreshold = 0xffff;
++static constexpr uint32_t kJitDefaultWarmupThreshold = 0x3fff;
+ // Different warm-up threshold constants. These default to the equivalent warmup thresholds divided
+ // by 2, but can be overridden at the command-line.
+ static constexpr uint32_t kJitStressDefaultWarmupThreshold = kJitDefaultWarmupThreshold / 2;
+-- 
+2.42.0
+

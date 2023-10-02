@@ -1,0 +1,211 @@
+From e8b9510281f0c32d7ffdf017cff9169b682c5785 Mon Sep 17 00:00:00 2001
+From: Nolan Scobie <nscobie@google.com>
+Date: Mon, 24 Oct 2022 19:57:43 -0400
+Subject: [PATCH 43/72] Fix erroneous self deletion on SkImage creation failure
+
+TL;DR: Skia should always call releaseProc, and maybe sooner than we thought.
+
+There are multiple scenarios where SkImage:MakeFromTexture will fail,
+returning a nullptr and calling releaseProc due to a RefCntedCallback
+falling out of scope. Previously this could cause mUsageCount to fall to
+0, resulting in the AutoBackendTextureRelease deleting itself even
+though DeferredLayerUpdater owned a ref and expected it to still exist.
+
+Also added logging for some reasons that could cause the later call to
+MakeFromTexture to fail.
+
+Bug: b/246831853
+Test: hwui_unit_tests
+Change-Id: I7fd2566b9a85fe286f72b0fc42eba5450cac69b0
+Merged-In: I7fd2566b9a85fe286f72b0fc42eba5450cac69b0
+---
+ libs/hwui/Android.bp                          |  1 +
+ libs/hwui/AutoBackendTextureRelease.cpp       | 16 +++-
+ libs/hwui/AutoBackendTextureRelease.h         |  6 ++
+ libs/hwui/tests/common/TestUtils.h            |  6 ++
+ .../unit/AutoBackendTextureReleaseTests.cpp   | 73 +++++++++++++++++++
+ 5 files changed, 98 insertions(+), 4 deletions(-)
+ create mode 100644 libs/hwui/tests/unit/AutoBackendTextureReleaseTests.cpp
+
+diff --git a/libs/hwui/Android.bp b/libs/hwui/Android.bp
+index ad9aa6cd..33f79352 100644
+--- a/libs/hwui/Android.bp
++++ b/libs/hwui/Android.bp
+@@ -674,6 +674,7 @@ cc_test {
+     srcs: [
+         "tests/unit/main.cpp",
+         "tests/unit/ABitmapTests.cpp",
++        "tests/unit/AutoBackendTextureReleaseTests.cpp",
+         "tests/unit/CacheManagerTests.cpp",
+         "tests/unit/CanvasContextTests.cpp",
+         "tests/unit/CanvasOpTests.cpp",
+diff --git a/libs/hwui/AutoBackendTextureRelease.cpp b/libs/hwui/AutoBackendTextureRelease.cpp
+index ef5eacbd..b656b6ac 100644
+--- a/libs/hwui/AutoBackendTextureRelease.cpp
++++ b/libs/hwui/AutoBackendTextureRelease.cpp
+@@ -32,9 +32,17 @@ AutoBackendTextureRelease::AutoBackendTextureRelease(GrDirectContext* context,
+     bool createProtectedImage = 0 != (desc.usage & AHARDWAREBUFFER_USAGE_PROTECTED_CONTENT);
+     GrBackendFormat backendFormat =
+             GrAHardwareBufferUtils::GetBackendFormat(context, buffer, desc.format, false);
++    LOG_ALWAYS_FATAL_IF(!backendFormat.isValid(),
++                        __FILE__ " Invalid GrBackendFormat. GrBackendApi==%" PRIu32
++                                 ", AHardwareBuffer_Format==%" PRIu32 ".",
++                        static_cast<int>(context->backend()), desc.format);
+     mBackendTexture = GrAHardwareBufferUtils::MakeBackendTexture(
+             context, buffer, desc.width, desc.height, &mDeleteProc, &mUpdateProc, &mImageCtx,
+             createProtectedImage, backendFormat, false);
++    LOG_ALWAYS_FATAL_IF(!mBackendTexture.isValid(),
++                        __FILE__ " Invalid GrBackendTexture. Width==%" PRIu32 ", height==%" PRIu32
++                                 ", protected==%d",
++                        desc.width, desc.height, createProtectedImage);
+ }
+ 
+ void AutoBackendTextureRelease::unref(bool releaseImage) {
+@@ -74,13 +82,13 @@ void AutoBackendTextureRelease::makeImage(AHardwareBuffer* buffer,
+     AHardwareBuffer_Desc desc;
+     AHardwareBuffer_describe(buffer, &desc);
+     SkColorType colorType = GrAHardwareBufferUtils::GetSkColorTypeFromBufferFormat(desc.format);
++    // The following ref will be counteracted by Skia calling releaseProc, either during
++    // MakeFromTexture if there is a failure, or later when SkImage is discarded. It must
++    // be called before MakeFromTexture, otherwise Skia may remove HWUI's ref on failure.
++    ref();
+     mImage = SkImage::MakeFromTexture(
+             context, mBackendTexture, kTopLeft_GrSurfaceOrigin, colorType, kPremul_SkAlphaType,
+             uirenderer::DataSpaceToColorSpace(dataspace), releaseProc, this);
+-    if (mImage.get()) {
+-        // The following ref will be counteracted by releaseProc, when SkImage is discarded.
+-        ref();
+-    }
+ }
+ 
+ void AutoBackendTextureRelease::newBufferContent(GrDirectContext* context) {
+diff --git a/libs/hwui/AutoBackendTextureRelease.h b/libs/hwui/AutoBackendTextureRelease.h
+index c9bb767a..f0eb2a8b 100644
+--- a/libs/hwui/AutoBackendTextureRelease.h
++++ b/libs/hwui/AutoBackendTextureRelease.h
+@@ -25,6 +25,9 @@
+ namespace android {
+ namespace uirenderer {
+ 
++// Friend TestUtils serves as a proxy for any test cases that require access to private members.
++class TestUtils;
++
+ /**
+  * AutoBackendTextureRelease manages EglImage/VkImage lifetime. It is a ref-counted object
+  * that keeps GPU resources alive until the last SkImage object using them is destroyed.
+@@ -66,6 +69,9 @@ private:
+ 
+     // mImage is the SkImage created from mBackendTexture.
+     sk_sp<SkImage> mImage;
++
++    // Friend TestUtils serves as a proxy for any test cases that require access to private members.
++    friend class TestUtils;
+ };
+ 
+ } /* namespace uirenderer */
+diff --git a/libs/hwui/tests/common/TestUtils.h b/libs/hwui/tests/common/TestUtils.h
+index 5092675a..fcaa745e 100644
+--- a/libs/hwui/tests/common/TestUtils.h
++++ b/libs/hwui/tests/common/TestUtils.h
+@@ -16,6 +16,7 @@
+ 
+ #pragma once
+ 
++#include <AutoBackendTextureRelease.h>
+ #include <DisplayList.h>
+ #include <Matrix.h>
+ #include <Properties.h>
+@@ -283,6 +284,11 @@ public:
+     static SkRect getClipBounds(const SkCanvas* canvas);
+     static SkRect getLocalClipBounds(const SkCanvas* canvas);
+ 
++    static int getUsageCount(const AutoBackendTextureRelease* textureRelease) {
++        EXPECT_NE(nullptr, textureRelease);
++        return textureRelease->mUsageCount;
++    }
++
+     struct CallCounts {
+         int sync = 0;
+         int contextDestroyed = 0;
+diff --git a/libs/hwui/tests/unit/AutoBackendTextureReleaseTests.cpp b/libs/hwui/tests/unit/AutoBackendTextureReleaseTests.cpp
+new file mode 100644
+index 00000000..2ec78a42
+--- /dev/null
++++ b/libs/hwui/tests/unit/AutoBackendTextureReleaseTests.cpp
+@@ -0,0 +1,73 @@
++/*
++ * Copyright (C) 2022 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#include <gtest/gtest.h>
++
++#include "AutoBackendTextureRelease.h"
++#include "tests/common/TestUtils.h"
++
++using namespace android;
++using namespace android::uirenderer;
++
++AHardwareBuffer* allocHardwareBuffer() {
++    AHardwareBuffer* buffer;
++    AHardwareBuffer_Desc desc = {
++            .width = 16,
++            .height = 16,
++            .layers = 1,
++            .format = AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM,
++            .usage = AHARDWAREBUFFER_USAGE_CPU_READ_RARELY | AHARDWAREBUFFER_USAGE_CPU_WRITE_RARELY,
++    };
++    constexpr int kSucceeded = 0;
++    int status = AHardwareBuffer_allocate(&desc, &buffer);
++    EXPECT_EQ(kSucceeded, status);
++    return buffer;
++}
++
++// Expands to AutoBackendTextureRelease_makeImage_invalid_RenderThreadTest,
++// set as friend in AutoBackendTextureRelease.h
++RENDERTHREAD_TEST(AutoBackendTextureRelease, makeImage_invalid) {
++    AHardwareBuffer* buffer = allocHardwareBuffer();
++    AutoBackendTextureRelease* textureRelease =
++            new AutoBackendTextureRelease(renderThread.getGrContext(), buffer);
++
++    EXPECT_EQ(1, TestUtils::getUsageCount(textureRelease));
++
++    // SkImage::MakeFromTexture should fail if given null GrDirectContext.
++    textureRelease->makeImage(buffer, HAL_DATASPACE_UNKNOWN, /*context = */ nullptr);
++
++    EXPECT_EQ(1, TestUtils::getUsageCount(textureRelease));
++
++    textureRelease->unref(true);
++    AHardwareBuffer_release(buffer);
++}
++
++// Expands to AutoBackendTextureRelease_makeImage_valid_RenderThreadTest,
++// set as friend in AutoBackendTextureRelease.h
++RENDERTHREAD_TEST(AutoBackendTextureRelease, makeImage_valid) {
++    AHardwareBuffer* buffer = allocHardwareBuffer();
++    AutoBackendTextureRelease* textureRelease =
++            new AutoBackendTextureRelease(renderThread.getGrContext(), buffer);
++
++    EXPECT_EQ(1, TestUtils::getUsageCount(textureRelease));
++
++    textureRelease->makeImage(buffer, HAL_DATASPACE_UNKNOWN, renderThread.getGrContext());
++
++    EXPECT_EQ(2, TestUtils::getUsageCount(textureRelease));
++
++    textureRelease->unref(true);
++    AHardwareBuffer_release(buffer);
++}
+-- 
+2.42.0
+

@@ -1,0 +1,121 @@
+From 9e0c326f540daae7d3e526c47d29c4f7dfddac7e Mon Sep 17 00:00:00 2001
+From: Danny Lin <danny@kdrag0n.dev>
+Date: Sat, 16 Oct 2021 05:28:30 -0700
+Subject: [PATCH 23/72] display: Render screen-off fade animation in linear
+ sRGB space
+
+The sRGB transfer function is a piecewise function with linear and gamma
+2.4 parts, not involving cosine or other magic constants.
+
+Fade colors in linear sRGB instead of non-linear sRGB + magic gamma to
+minimize color distortion as the animation progresses.
+
+Change-Id: I57db834f938cc63b7298af1c9dfe8c284dc6abe2
+---
+ core/res/res/raw/color_fade_frag.frag         | 34 +++++++++++++++----
+ .../com/android/server/display/ColorFade.java | 15 +++-----
+ 2 files changed, 32 insertions(+), 17 deletions(-)
+
+diff --git a/core/res/res/raw/color_fade_frag.frag b/core/res/res/raw/color_fade_frag.frag
+index 29975d5f..db0f63f2 100644
+--- a/core/res/res/raw/color_fade_frag.frag
++++ b/core/res/res/raw/color_fade_frag.frag
+@@ -3,12 +3,34 @@
+ precision mediump float;
+ uniform samplerExternalOES texUnit;
+ uniform float opacity;
+-uniform float gamma;
+ varying vec2 UV;
+ 
+-void main()
+-{
+-    vec4 color = texture2D(texUnit, UV);
+-    vec3 rgb = pow(color.rgb * opacity, vec3(gamma));
+-    gl_FragColor = vec4(rgb, 1.0);
++vec3 mixBvec3(vec3 a, vec3 b, bvec3 sel) {
++    return vec3(
++        sel.x ? b.x : a.x,
++        sel.y ? b.y : a.y,
++        sel.z ? b.z : a.z
++    );
++}
++
++vec3 srgbTransfer(vec3 c) {
++    vec3 gamma = 1.055 * pow(c, vec3(1.0/2.4)) - 0.055;
++    vec3 linear = 12.92 * c;
++    bvec3 selectParts = lessThan(c, vec3(0.0031308));
++    return mixBvec3(gamma, linear, selectParts);
++}
++
++vec3 srgbTransferInv(vec3 c) {
++    vec3 gamma = pow((c + 0.055)/1.055, vec3(2.4));
++    vec3 linear = c / 12.92;
++    bvec3 selectParts = lessThan(c, vec3(0.04045));
++    return mixBvec3(gamma, linear, selectParts);
++}
++
++void main() {
++    vec3 inRgb = srgbTransferInv(texture2D(texUnit, UV).rgb);
++    vec3 fade = inRgb * opacity * opacity;
++    vec3 outRgb = srgbTransfer(fade);
++
++    gl_FragColor = vec4(outRgb, 1.0);
+ }
+diff --git a/services/core/java/com/android/server/display/ColorFade.java b/services/core/java/com/android/server/display/ColorFade.java
+index cb04ddfd..67d2e79a 100644
+--- a/services/core/java/com/android/server/display/ColorFade.java
++++ b/services/core/java/com/android/server/display/ColorFade.java
+@@ -112,7 +112,7 @@ final class ColorFade {
+     private final float mProjMatrix[] = new float[16];
+     private final int[] mGLBuffers = new int[2];
+     private int mTexCoordLoc, mVertexLoc, mTexUnitLoc, mProjMatrixLoc, mTexMatrixLoc;
+-    private int mOpacityLoc, mGammaLoc;
++    private int mOpacityLoc;
+     private int mProgram;
+ 
+     // Vertex and corresponding texture coordinates.
+@@ -294,7 +294,6 @@ final class ColorFade {
+         mTexMatrixLoc = GLES20.glGetUniformLocation(mProgram, "tex_matrix");
+ 
+         mOpacityLoc = GLES20.glGetUniformLocation(mProgram, "opacity");
+-        mGammaLoc = GLES20.glGetUniformLocation(mProgram, "gamma");
+         mTexUnitLoc = GLES20.glGetUniformLocation(mProgram, "texUnit");
+ 
+         GLES20.glUseProgram(mProgram);
+@@ -438,12 +437,7 @@ final class ColorFade {
+             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+ 
+             // Draw the frame.
+-            double one_minus_level = 1 - level;
+-            double cos = Math.cos(Math.PI * one_minus_level);
+-            double sign = cos < 0 ? -1 : 1;
+-            float opacity = (float) -Math.pow(one_minus_level, 2) + 1;
+-            float gamma = (float) ((0.5d * sign * Math.pow(cos, 2) + 0.5d) * 0.9d + 0.1d);
+-            drawFaded(opacity, 1.f / gamma);
++            drawFaded(level);
+             if (checkGlErrors("drawFrame")) {
+                 return false;
+             }
+@@ -455,9 +449,9 @@ final class ColorFade {
+         return showSurface(1.0f);
+     }
+ 
+-    private void drawFaded(float opacity, float gamma) {
++    private void drawFaded(float opacity) {
+         if (DEBUG) {
+-            Slog.d(TAG, "drawFaded: opacity=" + opacity + ", gamma=" + gamma);
++            Slog.d(TAG, "drawFaded: opacity=" + opacity);
+         }
+         // Use shaders
+         GLES20.glUseProgram(mProgram);
+@@ -466,7 +460,6 @@ final class ColorFade {
+         GLES20.glUniformMatrix4fv(mProjMatrixLoc, 1, false, mProjMatrix, 0);
+         GLES20.glUniformMatrix4fv(mTexMatrixLoc, 1, false, mTexMatrix, 0);
+         GLES20.glUniform1f(mOpacityLoc, opacity);
+-        GLES20.glUniform1f(mGammaLoc, gamma);
+ 
+         // Use textures
+         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+-- 
+2.42.0
+

@@ -1,0 +1,113 @@
+From 28ea6edc970ad0b3a8fe343a2f538804d4d632a7 Mon Sep 17 00:00:00 2001
+From: Adrian Roos <roosa@google.com>
+Date: Tue, 14 Mar 2023 11:03:47 +0000
+Subject: [PATCH 48/72] WindowProcessController: Fix potential memory leak
+
+Fixes an issue where the WindowProcessController may leak after process
+death due to still having listeners registered.
+
+Now unregisters all listeners when the process record gets removed.
+
+Fixes: 273149525
+Test: atest WindowProcessControllerTests WindowProcessControllerMapTests
+Change-Id: I44323f280ed7aa641ab41c4e62a354a4525a4268
+---
+ .../android/server/wm/WindowProcessController.java   |  7 +++++++
+ .../server/wm/WindowProcessControllerMap.java        |  3 ++-
+ .../server/wm/WindowProcessControllerMapTests.java   | 12 ++++++++++++
+ .../server/wm/WindowProcessControllerTests.java      | 11 +++++++++++
+ 4 files changed, 32 insertions(+), 1 deletion(-)
+
+diff --git a/services/core/java/com/android/server/wm/WindowProcessController.java b/services/core/java/com/android/server/wm/WindowProcessController.java
+index 4907eb6e..1c10380c 100644
+--- a/services/core/java/com/android/server/wm/WindowProcessController.java
++++ b/services/core/java/com/android/server/wm/WindowProcessController.java
+@@ -1343,6 +1343,13 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
+         unregisterDisplayAreaConfigurationListener();
+     }
+ 
++    /**
++     * Destroys the WindwoProcessController, after the process has been removed.
++     */
++    void destroy() {
++        unregisterConfigurationListeners();
++    }
++
+     /**
+      * Check if activity configuration override for the activity process needs an update and perform
+      * if needed. By default we try to override the process configuration to match the top activity
+diff --git a/services/core/java/com/android/server/wm/WindowProcessControllerMap.java b/services/core/java/com/android/server/wm/WindowProcessControllerMap.java
+index 2767972f..424b0436 100644
+--- a/services/core/java/com/android/server/wm/WindowProcessControllerMap.java
++++ b/services/core/java/com/android/server/wm/WindowProcessControllerMap.java
+@@ -19,8 +19,8 @@ package com.android.server.wm;
+ import android.util.ArraySet;
+ import android.util.SparseArray;
+ 
+-import java.util.Map;
+ import java.util.HashMap;
++import java.util.Map;
+ 
+ final class WindowProcessControllerMap {
+ 
+@@ -67,6 +67,7 @@ final class WindowProcessControllerMap {
+             mPidMap.remove(pid);
+             // remove process from mUidMap
+             removeProcessFromUidMap(proc);
++            proc.destroy();
+         }
+     }
+ 
+diff --git a/services/tests/wmtests/src/com/android/server/wm/WindowProcessControllerMapTests.java b/services/tests/wmtests/src/com/android/server/wm/WindowProcessControllerMapTests.java
+index c2ee0798..2a3c9bca 100644
+--- a/services/tests/wmtests/src/com/android/server/wm/WindowProcessControllerMapTests.java
++++ b/services/tests/wmtests/src/com/android/server/wm/WindowProcessControllerMapTests.java
+@@ -22,6 +22,8 @@ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertFalse;
+ import static org.junit.Assert.assertNull;
+ import static org.junit.Assert.assertTrue;
++import static org.mockito.Mockito.spy;
++import static org.mockito.Mockito.verify;
+ 
+ import android.os.UserHandle;
+ import android.platform.test.annotations.Presubmit;
+@@ -129,4 +131,14 @@ public class WindowProcessControllerMapTests extends WindowTestsBase {
+         assertEquals(uid2processes.size(), 1);
+         assertEquals(mProcessMap.getProcess(FAKE_PID1), pid1uid2);
+     }
++
++    @Test
++    public void testRemove_callsDestroy() {
++        var proc = spy(pid1uid1);
++        mProcessMap.put(FAKE_PID1, proc);
++
++        mProcessMap.remove(FAKE_PID1);
++
++        verify(proc).destroy();
++    }
+ }
+diff --git a/services/tests/wmtests/src/com/android/server/wm/WindowProcessControllerTests.java b/services/tests/wmtests/src/com/android/server/wm/WindowProcessControllerTests.java
+index 8bd41485..60bdec15 100644
+--- a/services/tests/wmtests/src/com/android/server/wm/WindowProcessControllerTests.java
++++ b/services/tests/wmtests/src/com/android/server/wm/WindowProcessControllerTests.java
+@@ -157,6 +157,17 @@ public class WindowProcessControllerTests extends WindowTestsBase {
+         assertEquals(displayBounds, mWpc.getConfiguration().windowConfiguration.getBounds());
+     }
+ 
++    @Test
++    public void testDestroy_unregistersDisplayAreaListener() {
++        final TestDisplayContent testDisplayContent1 = createTestDisplayContentInContainer();
++        final DisplayArea imeContainer1 = testDisplayContent1.getImeContainer();
++        mWpc.registerDisplayAreaConfigurationListener(imeContainer1);
++
++        mWpc.destroy();
++
++        assertNull(mWpc.getDisplayArea());
++    }
++
+     @Test
+     public void testSetRunningRecentsAnimation() {
+         mWpc.setRunningRecentsAnimation(true);
+-- 
+2.42.0
+

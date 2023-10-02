@@ -1,0 +1,51 @@
+From 1809b9031c1eb7138494362f54c3fbc3f229125a Mon Sep 17 00:00:00 2001
+From: Houxiang Dai <houxiang.dai@mediatek.com>
+Date: Wed, 10 May 2023 11:53:13 +0800
+Subject: [PATCH 63/72] Fix some memory leakage
+
+Remove MediaCodec sPoll buffer leakage
+
+Test:
+DTV input source stress test pass
+
+Bug: 279135364, 235185556
+Change-Id: I751beaeba39eeabd2c6aa9059b51997130dbf86b
+---
+ media/java/android/media/MediaCodec.java | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/media/java/android/media/MediaCodec.java b/media/java/android/media/MediaCodec.java
+index 220232d6..c4aa5c11 100644
+--- a/media/java/android/media/MediaCodec.java
++++ b/media/java/android/media/MediaCodec.java
+@@ -3062,7 +3062,10 @@ final public class MediaCodec {
+                 mValid = false;
+                 mNativeContext = 0;
+             }
+-            sPool.offer(this);
++
++            if (!mInternal) {
++                sPool.offer(this);
++            }
+         }
+ 
+         private native void native_recycle();
+@@ -3126,6 +3129,7 @@ final public class MediaCodec {
+             mNativeContext = context;
+             mMappable = isMappable;
+             mValid = (context != 0);
++            mInternal = true;
+         }
+ 
+         private static final BlockingQueue<LinearBlock> sPool =
+@@ -3136,6 +3140,7 @@ final public class MediaCodec {
+         private boolean mMappable = false;
+         private ByteBuffer mMapped = null;
+         private long mNativeContext = 0;
++        private boolean mInternal = false;
+     }
+ 
+     /**
+-- 
+2.42.0
+

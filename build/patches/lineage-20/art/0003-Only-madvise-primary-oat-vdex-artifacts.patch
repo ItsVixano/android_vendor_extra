@@ -1,0 +1,226 @@
+From b91786e7fd7484f69c91a57ce773d589283ddae8 Mon Sep 17 00:00:00 2001
+From: Jared Duke <jdduke@google.com>
+Date: Fri, 10 Jun 2022 11:18:59 -0700
+Subject: [PATCH 03/30] Only madvise primary oat/vdex artifacts
+
+Suppress madvise calls to non-primary vdex/oat files whenever possible.
+Note that this suppression relies on AppInfo registration happening
+relatively early in the app lifecycle, which is generally the case.
+Until the registration is made, we madvise these artifacts as is
+done with the current behavior.
+
+This should avoid cases during app startup where Dynamite-like
+dependencies (e.g., for GMS Core) currently trigger a full madvise
+of all dependent vdex/oat files, which is generally unnecessary
+and potentially wasteful for such cases.
+
+Note that this change moves the oat madvise call out of OatFile's
+constructor into OpenDexFilesFromOat. This makes it easier to reason
+about ordering relative to other madvise calls (for dex/vdex), but
+should be almost identical in terms of timing.
+
+A/B perf tests shows that this slightly improves app startup time
+across a suite of apps, with apps that don't load secondary APKs/dex
+files not being impacted at all.
+
+Bug: 235130726
+Test: m + flash and verify GMS vdex/oat files not madvised by apps
+Change-Id: I41374d5ae9f91f39e399ac21615a821307c56b6e
+---
+ runtime/app_info.cc         | 13 +++++++++++++
+ runtime/app_info.h          |  7 +++++++
+ runtime/app_info_test.cc    | 14 +++++++++++++-
+ runtime/oat_file.cc         | 11 -----------
+ runtime/oat_file_manager.cc | 23 ++++++++++++++++++++++-
+ 5 files changed, 55 insertions(+), 13 deletions(-)
+
+diff --git a/runtime/app_info.cc b/runtime/app_info.cc
+index c72951eebc..2dbbbf6a90 100644
+--- a/runtime/app_info.cc
++++ b/runtime/app_info.cc
+@@ -93,6 +93,12 @@ void AppInfo::RegisterOdexStatus(const std::string& code_path,
+         << "\nodex_status=" << odex_status;
+ }
+ 
++bool AppInfo::HasRegisteredAppInfo() {
++  MutexLock mu(Thread::Current(), update_mutex_);
++
++  return package_name_.has_value();
++}
++
+ void AppInfo::GetPrimaryApkOptimizationStatus(
+     std::string* out_compiler_filter,
+     std::string* out_compilation_reason) {
+@@ -110,6 +116,13 @@ void AppInfo::GetPrimaryApkOptimizationStatus(
+   *out_compilation_reason = kUnknownValue;
+ }
+ 
++AppInfo::CodeType AppInfo::GetRegisteredCodeType(const std::string& code_path) {
++  MutexLock mu(Thread::Current(), update_mutex_);
++
++  const auto it = registered_code_locations_.find(code_path);
++  return it != registered_code_locations_.end() ? it->second.code_type : CodeType::kUnknown;
++}
++
+ std::ostream& operator<<(std::ostream& os, AppInfo& rhs) {
+   MutexLock mu(Thread::Current(), rhs.update_mutex_);
+ 
+diff --git a/runtime/app_info.h b/runtime/app_info.h
+index 68f2c586da..43e2ef320b 100644
+--- a/runtime/app_info.h
++++ b/runtime/app_info.h
+@@ -77,6 +77,13 @@ class AppInfo {
+   void GetPrimaryApkOptimizationStatus(std::string* out_compiler_filter,
+                                        std::string* out_compilation_reason);
+ 
++  // Whether we've received a call to RegisterAppInfo.
++  bool HasRegisteredAppInfo();
++
++  // The registered code type for a given code path. Note that this will
++  // be kUnknown until an explicit registration for that path has been made.
++  CodeType GetRegisteredCodeType(const std::string& code_path);
++
+  private:
+   // Encapsulates optimization information about a particular code location.
+   struct CodeLocationInfo {
+diff --git a/runtime/app_info_test.cc b/runtime/app_info_test.cc
+index 4a365dec96..51dd42f6fb 100644
+--- a/runtime/app_info_test.cc
++++ b/runtime/app_info_test.cc
+@@ -24,12 +24,17 @@ namespace art {
+ 
+ TEST(AppInfoTest, RegisterAppInfo) {
+   AppInfo app_info;
++  EXPECT_FALSE(app_info.HasRegisteredAppInfo());
++  EXPECT_EQ(app_info.GetRegisteredCodeType("code_location"), AppInfo::CodeType::kUnknown);
++
+   app_info.RegisterAppInfo(
+       "package_name",
+       std::vector<std::string>({"code_location"}),
+       "",
+       "",
+       AppInfo::CodeType::kPrimaryApk);
++  EXPECT_TRUE(app_info.HasRegisteredAppInfo());
++  EXPECT_EQ(app_info.GetRegisteredCodeType("code_location"), AppInfo::CodeType::kPrimaryApk);
+ 
+   std::string filter;
+   std::string reason;
+@@ -48,11 +53,13 @@ TEST(AppInfoTest, RegisterAppInfoWithOdexStatus) {
+       "",
+       "",
+       AppInfo::CodeType::kPrimaryApk);
++  EXPECT_EQ(app_info.GetRegisteredCodeType("code_location"), AppInfo::CodeType::kPrimaryApk);
+   app_info.RegisterOdexStatus(
+       "code_location",
+       "filter",
+       "reason",
+       "odex_status");
++  EXPECT_EQ(app_info.GetRegisteredCodeType("code_location"), AppInfo::CodeType::kPrimaryApk);
+ 
+   std::string filter;
+   std::string reason;
+@@ -69,17 +76,22 @@ TEST(AppInfoTest, RegisterAppInfoWithOdexStatusMultiplePrimary) {
+       "filter",
+       "reason",
+       "odex_status");
++  EXPECT_FALSE(app_info.HasRegisteredAppInfo());
+   app_info.RegisterOdexStatus(
+       "code_location2",
+       "filter2",
+       "reason2",
+       "odex_status");
++  EXPECT_FALSE(app_info.HasRegisteredAppInfo());
+   app_info.RegisterAppInfo(
+       "package_name",
+       std::vector<std::string>({"code_location"}),
+       "",
+       "",
+       AppInfo::CodeType::kPrimaryApk);
++  EXPECT_TRUE(app_info.HasRegisteredAppInfo());
++  EXPECT_EQ(app_info.GetRegisteredCodeType("code_location"), AppInfo::CodeType::kPrimaryApk);
++  EXPECT_EQ(app_info.GetRegisteredCodeType("code_location2"), AppInfo::CodeType::kUnknown);
+ 
+   std::string filter;
+   std::string reason;
+@@ -110,7 +122,7 @@ TEST(AppInfoTest, RegisterAppInfoWithOdexStatusNoPrimary) {
+       "filter",
+       "reason",
+       "odex_status");
+-
++  EXPECT_EQ(app_info.GetRegisteredCodeType("code_location"), AppInfo::CodeType::kSplitApk);
+ 
+   // The optimization status is unknown since we don't have primary apks.
+   app_info.GetPrimaryApkOptimizationStatus(&filter, &reason);
+diff --git a/runtime/oat_file.cc b/runtime/oat_file.cc
+index 63778c7b0b..221cf67e8b 100644
+--- a/runtime/oat_file.cc
++++ b/runtime/oat_file.cc
+@@ -1907,17 +1907,6 @@ OatFile* OatFile::Open(int zip_fd,
+                                                                  reservation,
+                                                                  error_msg);
+   if (with_dlopen != nullptr) {
+-    Runtime* runtime = Runtime::Current();
+-    // The runtime might not be available at this point if we're running
+-    // dex2oat or oatdump.
+-    if (runtime != nullptr) {
+-      size_t madvise_size_limit = runtime->GetMadviseWillNeedSizeOdex();
+-      Runtime::MadviseFileForRange(madvise_size_limit,
+-                                   with_dlopen->Size(),
+-                                   with_dlopen->Begin(),
+-                                   with_dlopen->End(),
+-                                   oat_location);
+-    }
+     return with_dlopen;
+   }
+   if (kPrintDlOpenErrorMessage) {
+diff --git a/runtime/oat_file_manager.cc b/runtime/oat_file_manager.cc
+index c3a268d8b7..ecf3a04cc3 100644
+--- a/runtime/oat_file_manager.cc
++++ b/runtime/oat_file_manager.cc
+@@ -229,6 +229,16 @@ std::vector<std::unique_ptr<const DexFile>> OatFileManager::OpenDexFilesFromOat(
+         compilation_filter.c_str(),
+         compilation_reason.c_str()));
+ 
++    const bool has_registered_app_info = Runtime::Current()->GetAppInfo()->HasRegisteredAppInfo();
++    const AppInfo::CodeType code_type =
++        Runtime::Current()->GetAppInfo()->GetRegisteredCodeType(dex_location);
++    // We only want to madvise primary/split dex artifacts as a startup optimization. However,
++    // as the code_type for those artifacts may not be set until the initial app info registration,
++    // we conservatively madvise everything until the app info registration is complete.
++    const bool should_madvise_vdex_and_odex = !has_registered_app_info ||
++                                              code_type == AppInfo::CodeType::kPrimaryApk ||
++                                              code_type == AppInfo::CodeType::kSplitApk;
++
+     // Proceed with oat file loading.
+     std::unique_ptr<const OatFile> oat_file(oat_file_assistant.GetBestOatFile().release());
+     VLOG(oat) << "OatFileAssistant(" << dex_location << ").GetBestOatFile()="
+@@ -244,6 +254,16 @@ std::vector<std::unique_ptr<const DexFile>> OatFileManager::OpenDexFilesFromOat(
+       // Load the dex files from the oat file.
+       bool added_image_space = false;
+       if (oat_file->IsExecutable()) {
++        if (should_madvise_vdex_and_odex) {
++          VLOG(oat) << "Madvising oat file: " << oat_file->GetLocation();
++          size_t madvise_size_limit = runtime->GetMadviseWillNeedSizeOdex();
++          Runtime::MadviseFileForRange(madvise_size_limit,
++                                       oat_file->Size(),
++                                       oat_file->Begin(),
++                                       oat_file->End(),
++                                       oat_file->GetLocation());
++        }
++
+         ScopedTrace app_image_timing("AppImage:Loading");
+ 
+         // We need to throw away the image space if we are debuggable but the oat-file source of the
+@@ -345,7 +365,8 @@ std::vector<std::unique_ptr<const DexFile>> OatFileManager::OpenDexFilesFromOat(
+ 
+       if (oat_file != nullptr) {
+         VdexFile* vdex_file = oat_file->GetVdexFile();
+-        if (vdex_file != nullptr) {
++        if (should_madvise_vdex_and_odex && vdex_file != nullptr) {
++          VLOG(oat) << "Madvising vdex file: " << vdex_file->GetName();
+           // Opened vdex file from an oat file, madvise it to its loaded state.
+           // TODO(b/196052575): Unify dex and vdex madvise knobs and behavior.
+           const size_t madvise_size_limit = Runtime::Current()->GetMadviseWillNeedSizeVdex();
+-- 
+2.42.0
+

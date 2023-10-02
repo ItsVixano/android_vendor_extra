@@ -1,0 +1,58 @@
+From da32abf0e0855d923cc3754b135415e6224e35b1 Mon Sep 17 00:00:00 2001
+From: Suren Baghdasaryan <surenb@google.com>
+Date: Tue, 4 Apr 2023 04:42:50 +0000
+Subject: [PATCH 67/72] Do not crash webview if its group creation fails due to
+ a dead process
+
+Failure by webview to create a process group for newly spawned child is
+treated as a fatal error. This is done to avoid leaving children in
+the parent's process group because such relationship can lead to
+side-effects, like freezing the parent when the child's group is being
+frozen.
+However, if the child died before it could be added into a process
+group, there is no such danger, therefore such failure does not have
+to crash the parent process.
+Check for this situation and when createProcessGroup() fails because
+the child is dead, just log the error and keep going.
+
+Bug: 270103958
+Change-Id: I129da0838fc14ac0dbda43de49bcf47918f1822d
+Signed-off-by: Suren Baghdasaryan <surenb@google.com>
+---
+ .../java/com/android/server/am/ProcessList.java     | 13 ++++++++++---
+ 1 file changed, 10 insertions(+), 3 deletions(-)
+
+diff --git a/services/core/java/com/android/server/am/ProcessList.java b/services/core/java/com/android/server/am/ProcessList.java
+index efbac873..9799269c 100644
+--- a/services/core/java/com/android/server/am/ProcessList.java
++++ b/services/core/java/com/android/server/am/ProcessList.java
+@@ -104,6 +104,7 @@ import android.os.Trace;
+ import android.os.UserHandle;
+ import android.os.storage.StorageManagerInternal;
+ import android.system.Os;
++import android.system.OsConstants;
+ import android.text.TextUtils;
+ import android.util.ArrayMap;
+ import android.util.ArraySet;
+@@ -2326,9 +2327,15 @@ public final class ProcessList {
+ 
+             if (!regularZygote) {
+                 // webview and app zygote don't have the permission to create the nodes
+-                if (Process.createProcessGroup(uid, startResult.pid) < 0) {
+-                    throw new AssertionError("Unable to create process group for " + app.processName
+-                            + " (" + startResult.pid + ")");
++                final int res = Process.createProcessGroup(uid, startResult.pid);
++                if (res < 0) {
++                    if (res == -OsConstants.ESRCH) {
++                        Slog.e(ActivityManagerService.TAG, "Unable to create process group for "
++                            + app.processName + " (" + startResult.pid + ")");
++                    } else {
++                        throw new AssertionError("Unable to create process group for "
++                            + app.processName + " (" + startResult.pid + ")");
++                    }
+                 }
+             }
+ 
+-- 
+2.42.0
+

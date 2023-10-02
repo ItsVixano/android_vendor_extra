@@ -1,0 +1,63 @@
+From e4c6eb7a0eee68761cc7edafde333002c2b35567 Mon Sep 17 00:00:00 2001
+From: Mateus Azis <azis@google.com>
+Date: Mon, 27 Mar 2023 13:16:34 -0700
+Subject: [PATCH 65/72] Close DirectoryStream in ActivityThread after use.
+
+Right now, the directory stream is never closed. This leads to confusing
+"A resource failed to call close" errors. After some debugging, they
+seem to be coming from sun.nio.fs.UnixSecureDirectoryStream objects and
+reported here:
+https://cs.android.com/android/platform/superproject/+/master:libcore/dalvik/src/main/java/dalvik/system/CloseGuard.java;l=340;drc=e32570b11273e703580b60fc9d59b96223f376da.
+
+Test: m dist -j && acloud create --local-instance --local-image
+Change-Id: Ie9fddc2eab505527985d8c6b2822623fe16c7f89
+---
+ core/java/android/app/ActivityThread.java | 23 +++++++++++++----------
+ 1 file changed, 13 insertions(+), 10 deletions(-)
+
+diff --git a/core/java/android/app/ActivityThread.java b/core/java/android/app/ActivityThread.java
+index 58cfd651..5675ca70 100644
+--- a/core/java/android/app/ActivityThread.java
++++ b/core/java/android/app/ActivityThread.java
+@@ -236,6 +236,7 @@ import java.io.PrintWriter;
+ import java.lang.ref.WeakReference;
+ import java.lang.reflect.Method;
+ import java.net.InetAddress;
++import java.nio.file.DirectoryStream;
+ import java.nio.file.Files;
+ import java.nio.file.Path;
+ import java.nio.file.StandardCopyOption;
+@@ -4217,18 +4218,20 @@ public final class ActivityThread extends ClientTransactionHandler
+ 
+     static void handleAttachStartupAgents(String dataDir) {
+         try {
+-            Path code_cache = ContextImpl.getCodeCacheDirBeforeBind(new File(dataDir)).toPath();
+-            if (!Files.exists(code_cache)) {
++            Path codeCache = ContextImpl.getCodeCacheDirBeforeBind(new File(dataDir)).toPath();
++            if (!Files.exists(codeCache)) {
+                 return;
+             }
+-            Path startup_path = code_cache.resolve("startup_agents");
+-            if (Files.exists(startup_path)) {
+-                for (Path p : Files.newDirectoryStream(startup_path)) {
+-                    handleAttachAgent(
+-                            p.toAbsolutePath().toString()
+-                            + "="
+-                            + dataDir,
+-                            null);
++            Path startupPath = codeCache.resolve("startup_agents");
++            if (Files.exists(startupPath)) {
++                try (DirectoryStream<Path> startupFiles = Files.newDirectoryStream(startupPath)) {
++                    for (Path p : startupFiles) {
++                        handleAttachAgent(
++                                p.toAbsolutePath().toString()
++                                        + "="
++                                        + dataDir,
++                                null);
++                    }
+                 }
+             }
+         } catch (Exception e) {
+-- 
+2.42.0
+

@@ -1,0 +1,40 @@
+From 97a4d79fc15e1e6f78d9428d867a9730ddbae3ad Mon Sep 17 00:00:00 2001
+From: Santiago Aboy Solanes <solanes@google.com>
+Date: Mon, 9 Jan 2023 21:06:34 +0000
+Subject: [PATCH 21/30] Swap optimizations when inlining
+
+When we optimize a function we run:
+1. Constant folding
+2. Instruction simplifier
+3. Dead code elimination
+
+Make the inliner use the same order of optimizations.
+
+Improvements are small but noticeable. Locally, Pixel 5 speed compile:
+ * System server: -7.8KB (-0.02%)
+ * SysUIGoogle: -3.9KB (-0.01%)
+ * AGSA: -113KB (-0.03%)
+
+Test: art/test/testrunner/testrunner.py --host --64 --optimizing -b
+Change-Id: If2eaf9b35b43f88c29093fcf9a9ba17da22d2535
+---
+ compiler/optimizing/inliner.cc | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/compiler/optimizing/inliner.cc b/compiler/optimizing/inliner.cc
+index f51f2fe66d..60c9a5c718 100644
+--- a/compiler/optimizing/inliner.cc
++++ b/compiler/optimizing/inliner.cc
+@@ -2110,8 +2110,8 @@ void HInliner::RunOptimizations(HGraph* callee_graph,
+   InstructionSimplifier simplify(callee_graph, codegen_, inline_stats_);
+ 
+   HOptimization* optimizations[] = {
+-    &simplify,
+     &fold,
++    &simplify,
+     &dce,
+   };
+ 
+-- 
+2.42.0
+

@@ -1,0 +1,55 @@
+From ce6f15c595ffb7082d52cf39b8eab48fcf58584e Mon Sep 17 00:00:00 2001
+From: Alex Leung <alexleung@meta.com>
+Date: Wed, 8 Mar 2023 19:42:51 -0800
+Subject: [PATCH 66/72] Fix AudioMix.equals()
+
+Use Object.equals() when comparing Objects instead of '=='
+
+Test: Added unit tests (see topic).  Verified that test failed before changes and passed afterwards.
+Change-Id: I12d8cb24207c64b96d2fe65d4b2045873b080bc3
+Merged-In: I12d8cb24207c64b96d2fe65d4b2045873b080bc3
+---
+ media/java/android/media/audiopolicy/AudioMix.java | 13 ++++++++-----
+ 1 file changed, 8 insertions(+), 5 deletions(-)
+
+diff --git a/media/java/android/media/audiopolicy/AudioMix.java b/media/java/android/media/audiopolicy/AudioMix.java
+index f85bdee1..094a33f3 100644
+--- a/media/java/android/media/audiopolicy/AudioMix.java
++++ b/media/java/android/media/audiopolicy/AudioMix.java
+@@ -25,6 +25,8 @@ import android.media.AudioFormat;
+ import android.media.AudioSystem;
+ import android.os.Build;
+ 
++import com.android.internal.annotations.VisibleForTesting;
++
+ import java.lang.annotation.Retention;
+ import java.lang.annotation.RetentionPolicy;
+ import java.util.Objects;
+@@ -252,10 +254,10 @@ public class AudioMix {
+         if (o == null || getClass() != o.getClass()) return false;
+ 
+         final AudioMix that = (AudioMix) o;
+-        return (this.mRouteFlags == that.mRouteFlags)
+-                && (this.mRule == that.mRule)
+-                && (this.mMixType == that.mMixType)
+-                && (this.mFormat == that.mFormat);
++        return Objects.equals(this.mRouteFlags, that.mRouteFlags)
++            && Objects.equals(this.mRule, that.mRule)
++            && Objects.equals(this.mMixType, that.mMixType)
++            && Objects.equals(this.mFormat, that.mFormat);
+     }
+ 
+     /** @hide */
+@@ -340,7 +342,8 @@ public class AudioMix {
+          * @param address
+          * @return the same Builder instance.
+          */
+-        Builder setDevice(int deviceType, String address) {
++        @VisibleForTesting
++        public Builder setDevice(int deviceType, String address) {
+             mDeviceSystemType = deviceType;
+             mDeviceAddress = address;
+             return this;
+-- 
+2.42.0
+

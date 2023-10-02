@@ -1,0 +1,136 @@
+From 84435f25a1a5d8e59a7da146cc52ea20ad48bda7 Mon Sep 17 00:00:00 2001
+From: Nicolas Geoffray <ngeoffray@google.com>
+Date: Tue, 10 May 2022 15:50:03 +0100
+Subject: [PATCH 50/72] Cleanup and consistency around system server profiling.
+
+The profiling currently works by accident: only because we profile the
+boot classpath which executes in JIT zygote do we not load system server
+AOT artifacts.
+
+So make the not loading AOT artifacts in system server explicit when the
+system server is being profild.
+
+Test: system server profiling
+Change-Id: I8d787c8f8524d9d6074dc0f552a856640f11cef0
+---
+ .../os/SystemServerClassLoaderFactory.java    |  4 ++
+ .../com/android/internal/os/ZygoteInit.java   | 41 +++++++++++--------
+ core/jni/com_android_internal_os_Zygote.cpp   |  5 ++-
+ 3 files changed, 31 insertions(+), 19 deletions(-)
+
+diff --git a/core/java/com/android/internal/os/SystemServerClassLoaderFactory.java b/core/java/com/android/internal/os/SystemServerClassLoaderFactory.java
+index a03bac45..90ad34d6 100644
+--- a/core/java/com/android/internal/os/SystemServerClassLoaderFactory.java
++++ b/core/java/com/android/internal/os/SystemServerClassLoaderFactory.java
+@@ -87,6 +87,10 @@ public final class SystemServerClassLoaderFactory {
+         if (isTestOnly) {
+             return true;
+         }
++        // If system server is being profiled, it's OK to create class loaders anytime.
++        if (ZygoteInit.shouldProfileSystemServer()) {
++            return true;
++        }
+         return false;
+     }
+ 
+diff --git a/core/java/com/android/internal/os/ZygoteInit.java b/core/java/com/android/internal/os/ZygoteInit.java
+index ca1ae194..f1782967 100644
+--- a/core/java/com/android/internal/os/ZygoteInit.java
++++ b/core/java/com/android/internal/os/ZygoteInit.java
+@@ -238,6 +238,21 @@ public class ZygoteInit {
+         Trace.traceEnd(Trace.TRACE_TAG_DALVIK);
+     }
+ 
++    private static boolean isExperimentEnabled(String experiment) {
++        boolean defaultValue = SystemProperties.getBoolean(
++                "dalvik.vm." + experiment,
++                /*def=*/false);
++        // Can't use device_config since we are the zygote, and it's not initialized at this point.
++        return SystemProperties.getBoolean(
++                "persist.device_config." + DeviceConfig.NAMESPACE_RUNTIME_NATIVE_BOOT
++                        + "." + experiment,
++                defaultValue);
++    }
++
++    /* package-private */ static boolean shouldProfileSystemServer() {
++        return isExperimentEnabled("profilesystemserver");
++    }
++
+     /**
+      * Performs Zygote process initialization. Loads and initializes commonly used classes.
+      *
+@@ -341,14 +356,7 @@ public class ZygoteInit {
+             // If we are profiling the boot image, reset the Jit counters after preloading the
+             // classes. We want to preload for performance, and we can use method counters to
+             // infer what clases are used after calling resetJitCounters, for profile purposes.
+-            // Can't use device_config since we are the zygote.
+-            String prop = SystemProperties.get(
+-                    "persist.device_config.runtime_native_boot.profilebootclasspath", "");
+-            // Might be empty if the property is unset since the default is "".
+-            if (prop.length() == 0) {
+-                prop = SystemProperties.get("dalvik.vm.profilebootclasspath", "");
+-            }
+-            if ("true".equals(prop)) {
++            if (isExperimentEnabled("profilebootclasspath")) {
+                 Trace.traceBegin(Trace.TRACE_TAG_DALVIK, "ResetJitCounters");
+                 VMRuntime.resetJitCounters();
+                 Trace.traceEnd(Trace.TRACE_TAG_DALVIK);
+@@ -489,16 +497,6 @@ public class ZygoteInit {
+         ZygoteHooks.gcAndFinalize();
+     }
+ 
+-    private static boolean shouldProfileSystemServer() {
+-        boolean defaultValue = SystemProperties.getBoolean("dalvik.vm.profilesystemserver",
+-                /*default=*/ false);
+-        // Can't use DeviceConfig since it's not initialized at this point.
+-        return SystemProperties.getBoolean(
+-                "persist.device_config." + DeviceConfig.NAMESPACE_RUNTIME_NATIVE_BOOT
+-                        + ".profilesystemserver",
+-                defaultValue);
+-    }
+-
+     /**
+      * Finish remaining work for the newly forked system server process.
+      */
+@@ -580,6 +578,13 @@ public class ZygoteInit {
+      * in the forked system server process in the zygote SELinux domain.
+      */
+     private static void prefetchStandaloneSystemServerJars() {
++        if (shouldProfileSystemServer()) {
++            // We don't prefetch AOT artifacts if we are profiling system server, as we are going to
++            // JIT it.
++            // This method only gets called from native and should already be skipped if we profile
++            // system server. Still, be robust and check it again.
++            return;
++        }
+         String envStr = Os.getenv("STANDALONE_SYSTEMSERVER_JARS");
+         if (TextUtils.isEmpty(envStr)) {
+             return;
+diff --git a/core/jni/com_android_internal_os_Zygote.cpp b/core/jni/com_android_internal_os_Zygote.cpp
+index c8b85c31..6e2ea356 100644
+--- a/core/jni/com_android_internal_os_Zygote.cpp
++++ b/core/jni/com_android_internal_os_Zygote.cpp
+@@ -339,6 +339,7 @@ enum MountExternalKind {
+ // Must match values in com.android.internal.os.Zygote.
+ enum RuntimeFlags : uint32_t {
+     DEBUG_ENABLE_JDWP = 1,
++    PROFILE_SYSTEM_SERVER = 1 << 14,
+     PROFILE_FROM_SHELL = 1 << 15,
+     MEMORY_TAG_LEVEL_MASK = (1 << 19) | (1 << 20),
+     MEMORY_TAG_LEVEL_TBI = 1 << 19,
+@@ -1804,9 +1805,11 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray gids,
+                                            instruction_set.value().c_str());
+     }
+ 
+-    if (is_system_server) {
++    if (is_system_server && !(runtime_flags & RuntimeFlags::PROFILE_SYSTEM_SERVER)) {
+         // Prefetch the classloader for the system server. This is done early to
+         // allow a tie-down of the proper system server selinux domain.
++        // We don't prefetch when the system server is being profiled to avoid
++        // loading AOT code.
+         env->CallStaticObjectMethod(gZygoteInitClass, gGetOrCreateSystemServerClassLoader);
+         if (env->ExceptionCheck()) {
+             // Be robust here. The Java code will attempt to create the classloader
+-- 
+2.42.0
+

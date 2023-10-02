@@ -1,0 +1,971 @@
+From abc1a4daff57450ffe8e3aa6e29f7c8e50b41c12 Mon Sep 17 00:00:00 2001
+From: Santiago Aboy Solanes <solanes@google.com>
+Date: Fri, 14 Oct 2022 16:55:47 +0100
+Subject: [PATCH 22/30] Allow LSA to run with acquire/release operations
+
+LSA will run in graphs with acquire loads (i.e. monitor enter and
+volatile load) and release stores (i.e. monitor exit and volatile
+stores).
+
+Helps both LSE and the Scheduler, and brings code size and memory use
+reductions. For example, ~40KB (~0.1%) reduction in memory use when
+compiling android framework in armv8.
+
+Code size gains (locally run on Pixel 5 w/ AOSP):
+  Android Google Search App (AGSA): 209KB
+  System server: 44KB
+  System UI: 20KB
+which is ~0.1% for each compile.
+
+Bug: 227283233
+Test: art/test/testrunner/testrunner.py --host --64 --optimizing -b
+Change-Id: I9ac79cf2324348414186f95e531c98b4215b28ea
+---
+ compiler/optimizing/load_store_analysis.cc    |   8 -
+ compiler/optimizing/load_store_analysis.h     |  19 -
+ compiler/optimizing/load_store_elimination.cc |  74 +-
+ compiler/optimizing/scheduler.cc              |   1 +
+ .../expected-stderr.txt                       |   0
+ .../expected-stdout.txt                       |   0
+ .../info.txt                                  |   3 +
+ .../src/Main.java                             | 703 ++++++++++++++++++
+ 8 files changed, 775 insertions(+), 33 deletions(-)
+ create mode 100644 test/2242-checker-lse-acquire-release-operations/expected-stderr.txt
+ create mode 100644 test/2242-checker-lse-acquire-release-operations/expected-stdout.txt
+ create mode 100644 test/2242-checker-lse-acquire-release-operations/info.txt
+ create mode 100644 test/2242-checker-lse-acquire-release-operations/src/Main.java
+
+diff --git a/compiler/optimizing/load_store_analysis.cc b/compiler/optimizing/load_store_analysis.cc
+index 3fe42aff2e..5e4cffab84 100644
+--- a/compiler/optimizing/load_store_analysis.cc
++++ b/compiler/optimizing/load_store_analysis.cc
+@@ -283,14 +283,6 @@ bool LoadStoreAnalysis::Run() {
+     heap_location_collector_.CleanUp();
+     return false;
+   }
+-  if (heap_location_collector_.HasVolatile() || heap_location_collector_.HasMonitorOps()) {
+-    // Don't do load/store elimination if the method has volatile field accesses or
+-    // monitor operations, for now.
+-    // TODO: do it right.
+-    heap_location_collector_.CleanUp();
+-    return false;
+-  }
+-
+   heap_location_collector_.BuildAliasingMatrix();
+   heap_location_collector_.DumpReferenceStats(stats_);
+   return true;
+diff --git a/compiler/optimizing/load_store_analysis.h b/compiler/optimizing/load_store_analysis.h
+index 4975bae2a2..b12e70b194 100644
+--- a/compiler/optimizing/load_store_analysis.h
++++ b/compiler/optimizing/load_store_analysis.h
+@@ -253,8 +253,6 @@ class HeapLocationCollector : public HGraphVisitor {
+         heap_locations_(allocator->Adapter(kArenaAllocLSA)),
+         aliasing_matrix_(allocator, kInitialAliasingMatrixBitVectorSize, true, kArenaAllocLSA),
+         has_heap_stores_(false),
+-        has_volatile_(false),
+-        has_monitor_operations_(false),
+         lse_type_(lse_type) {
+     aliasing_matrix_.ClearAllBits();
+   }
+@@ -350,14 +348,6 @@ class HeapLocationCollector : public HGraphVisitor {
+     return has_heap_stores_;
+   }
+ 
+-  bool HasVolatile() const {
+-    return has_volatile_;
+-  }
+-
+-  bool HasMonitorOps() const {
+-    return has_monitor_operations_;
+-  }
+-
+   // Find and return the heap location index in heap_locations_.
+   // NOTE: When heap locations are created, potentially aliasing/overlapping
+   // accesses are given different indexes. This find function also
+@@ -540,9 +530,6 @@ class HeapLocationCollector : public HGraphVisitor {
+   }
+ 
+   void VisitFieldAccess(HInstruction* ref, const FieldInfo& field_info) {
+-    if (field_info.IsVolatile()) {
+-      has_volatile_ = true;
+-    }
+     DataType::Type type = field_info.GetFieldType();
+     const uint16_t declaring_class_def_index = field_info.GetDeclaringClassDefIndex();
+     const size_t offset = field_info.GetFieldOffset().SizeValue();
+@@ -637,18 +624,12 @@ class HeapLocationCollector : public HGraphVisitor {
+     CreateReferenceInfoForReferenceType(instruction);
+   }
+ 
+-  void VisitMonitorOperation(HMonitorOperation* monitor ATTRIBUTE_UNUSED) override {
+-    has_monitor_operations_ = true;
+-  }
+-
+   ScopedArenaAllocator* allocator_;
+   ScopedArenaVector<ReferenceInfo*> ref_info_array_;   // All references used for heap accesses.
+   ScopedArenaVector<HeapLocation*> heap_locations_;    // All heap locations.
+   ArenaBitVector aliasing_matrix_;    // aliasing info between each pair of locations.
+   bool has_heap_stores_;    // If there is no heap stores, LSE acts as GVN with better
+                             // alias analysis and won't be as effective.
+-  bool has_volatile_;       // If there are volatile field accesses.
+-  bool has_monitor_operations_;    // If there are monitor operations.
+   LoadStoreAnalysisType lse_type_;
+ 
+   DISALLOW_COPY_AND_ASSIGN(HeapLocationCollector);
+diff --git a/compiler/optimizing/load_store_elimination.cc b/compiler/optimizing/load_store_elimination.cc
+index a201d997d8..4ab4d8af98 100644
+--- a/compiler/optimizing/load_store_elimination.cc
++++ b/compiler/optimizing/load_store_elimination.cc
+@@ -993,13 +993,63 @@ class LSEVisitor final : private HGraphDelegateVisitor {
+                << " but LSE should be the only source of predicated-ifield-gets!";
+   }
+ 
++  void HandleAcquireLoad(HInstruction* instruction) {
++    DCHECK((instruction->IsInstanceFieldGet() && instruction->AsInstanceFieldGet()->IsVolatile()) ||
++           (instruction->IsStaticFieldGet() && instruction->AsStaticFieldGet()->IsVolatile()) ||
++           (instruction->IsMonitorOperation() && instruction->AsMonitorOperation()->IsEnter()))
++        << "Unexpected instruction " << instruction->GetId() << ": " << instruction->DebugName();
++
++    // Acquire operations e.g. MONITOR_ENTER change the thread's view of the memory, so we must
++    // invalidate all current values.
++    ScopedArenaVector<ValueRecord>& heap_values =
++        heap_values_for_[instruction->GetBlock()->GetBlockId()];
++    for (size_t i = 0u, size = heap_values.size(); i != size; ++i) {
++      KeepStores(heap_values[i].stored_by);
++      heap_values[i].stored_by = Value::PureUnknown();
++      heap_values[i].value = Value::PartialUnknown(heap_values[i].value);
++    }
++
++    // Note that there's no need to record the load as subsequent acquire loads shouldn't be
++    // eliminated either.
++  }
++
++  void HandleReleaseStore(HInstruction* instruction) {
++    DCHECK((instruction->IsInstanceFieldSet() && instruction->AsInstanceFieldSet()->IsVolatile()) ||
++           (instruction->IsStaticFieldSet() && instruction->AsStaticFieldSet()->IsVolatile()) ||
++           (instruction->IsMonitorOperation() && !instruction->AsMonitorOperation()->IsEnter()))
++        << "Unexpected instruction " << instruction->GetId() << ": " << instruction->DebugName();
++
++    // Release operations e.g. MONITOR_EXIT do not affect this thread's view of the memory, but
++    // they will push the modifications for other threads to see. Therefore, we must keep the
++    // stores but there's no need to clobber the value.
++    ScopedArenaVector<ValueRecord>& heap_values =
++        heap_values_for_[instruction->GetBlock()->GetBlockId()];
++    for (size_t i = 0u, size = heap_values.size(); i != size; ++i) {
++      KeepStores(heap_values[i].stored_by);
++      heap_values[i].stored_by = Value::PureUnknown();
++    }
++
++    // Note that there's no need to record the store as subsequent release store shouldn't be
++    // eliminated either.
++  }
++
+   void VisitInstanceFieldGet(HInstanceFieldGet* instruction) override {
++    if (instruction->IsVolatile()) {
++      HandleAcquireLoad(instruction);
++      return;
++    }
++
+     HInstruction* object = instruction->InputAt(0);
+     const FieldInfo& field = instruction->GetFieldInfo();
+     VisitGetLocation(instruction, heap_location_collector_.GetFieldHeapLocation(object, &field));
+   }
+ 
+   void VisitInstanceFieldSet(HInstanceFieldSet* instruction) override {
++    if (instruction->IsVolatile()) {
++      HandleReleaseStore(instruction);
++      return;
++    }
++
+     HInstruction* object = instruction->InputAt(0);
+     const FieldInfo& field = instruction->GetFieldInfo();
+     HInstruction* value = instruction->InputAt(1);
+@@ -1008,12 +1058,22 @@ class LSEVisitor final : private HGraphDelegateVisitor {
+   }
+ 
+   void VisitStaticFieldGet(HStaticFieldGet* instruction) override {
++    if (instruction->IsVolatile()) {
++      HandleAcquireLoad(instruction);
++      return;
++    }
++
+     HInstruction* cls = instruction->InputAt(0);
+     const FieldInfo& field = instruction->GetFieldInfo();
+     VisitGetLocation(instruction, heap_location_collector_.GetFieldHeapLocation(cls, &field));
+   }
+ 
+   void VisitStaticFieldSet(HStaticFieldSet* instruction) override {
++    if (instruction->IsVolatile()) {
++      HandleReleaseStore(instruction);
++      return;
++    }
++
+     HInstruction* cls = instruction->InputAt(0);
+     const FieldInfo& field = instruction->GetFieldInfo();
+     HInstruction* value = instruction->InputAt(1);
+@@ -1021,6 +1081,14 @@ class LSEVisitor final : private HGraphDelegateVisitor {
+     VisitSetLocation(instruction, idx, value);
+   }
+ 
++  void VisitMonitorOperation(HMonitorOperation* monitor_op) override {
++    if (monitor_op->IsEnter()) {
++      HandleAcquireLoad(monitor_op);
++    } else {
++      HandleReleaseStore(monitor_op);
++    }
++  }
++
+   void VisitArrayGet(HArrayGet* instruction) override {
+     VisitGetLocation(instruction, heap_location_collector_.GetArrayHeapLocation(instruction));
+   }
+@@ -1157,12 +1225,6 @@ class LSEVisitor final : private HGraphDelegateVisitor {
+     HandleThrowingInstruction(check_cast);
+   }
+ 
+-  void VisitMonitorOperation(HMonitorOperation* monitor_op) override {
+-    if (monitor_op->CanThrow()) {
+-      HandleThrowingInstruction(monitor_op);
+-    }
+-  }
+-
+   void HandleInvoke(HInstruction* instruction) {
+     // If `instruction` can throw we have to presume all stores are visible.
+     const bool can_throw = instruction->CanThrow();
+diff --git a/compiler/optimizing/scheduler.cc b/compiler/optimizing/scheduler.cc
+index 8f18ccff5f..f60225fbe0 100644
+--- a/compiler/optimizing/scheduler.cc
++++ b/compiler/optimizing/scheduler.cc
+@@ -721,6 +721,7 @@ bool HScheduler::IsSchedulable(const HInstruction* instruction) const {
+   //    HNativeDebugInfo
+   //    HThrow
+   //    HTryBoundary
++  //    All volatile field access e.g. HInstanceFieldGet
+   // TODO: Some of the instructions above may be safe to schedule (maybe as
+   // scheduling barriers).
+   return instruction->IsArrayGet() ||
+diff --git a/test/2242-checker-lse-acquire-release-operations/expected-stderr.txt b/test/2242-checker-lse-acquire-release-operations/expected-stderr.txt
+new file mode 100644
+index 0000000000..e69de29bb2
+diff --git a/test/2242-checker-lse-acquire-release-operations/expected-stdout.txt b/test/2242-checker-lse-acquire-release-operations/expected-stdout.txt
+new file mode 100644
+index 0000000000..e69de29bb2
+diff --git a/test/2242-checker-lse-acquire-release-operations/info.txt b/test/2242-checker-lse-acquire-release-operations/info.txt
+new file mode 100644
+index 0000000000..efdc63f68b
+--- /dev/null
++++ b/test/2242-checker-lse-acquire-release-operations/info.txt
+@@ -0,0 +1,3 @@
++Tests that we perform LSE with graphs with acquire loads
++(i.e. monitor enter and volatile load) and release stores
++(i.e. monitor exit and voaltile stores)
+diff --git a/test/2242-checker-lse-acquire-release-operations/src/Main.java b/test/2242-checker-lse-acquire-release-operations/src/Main.java
+new file mode 100644
+index 0000000000..433a4cd343
+--- /dev/null
++++ b/test/2242-checker-lse-acquire-release-operations/src/Main.java
+@@ -0,0 +1,703 @@
++/*
++ * Copyright (C) 2022 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++class TestClass {
++  TestClass() {}
++  int i;
++  int j;
++  volatile int vi;
++}
++
++public class Main {
++  public static void main(String[] args) {
++    // Volatile accesses.
++    assertEquals($noinline$testVolatileAccessesMustBeKept(new TestClass()), 3);
++
++    // Volatile loads - Different fields shouldn't alias.
++    assertEquals($noinline$testVolatileLoadDifferentFields(new TestClass(), new TestClass()), 3);
++    assertEquals(
++            $noinline$testVolatileLoadDifferentFieldsBlocking(new TestClass(), new TestClass()),
++            3);
++
++    // Volatile loads - Redundant store.
++    assertEquals($noinline$testVolatileLoadRedundantStore(new TestClass()), 2);
++    assertEquals($noinline$testVolatileLoadRedundantStoreBlocking(new TestClass()), 2);
++    assertEquals($noinline$testVolatileLoadRedundantStoreBlockingOnlyLoad(new TestClass()), 2);
++
++    // Volatile loads - Set and merge values.
++    assertEquals($noinline$testVolatileLoadSetAndMergeValues(new TestClass(), true), 1);
++    assertEquals($noinline$testVolatileLoadSetAndMergeValues(new TestClass(), false), 2);
++    assertEquals($noinline$testVolatileLoadSetAndMergeValuesBlocking(new TestClass(), true), 1);
++    assertEquals($noinline$testVolatileLoadSetAndMergeValuesBlocking(new TestClass(), false), 2);
++
++    // Volatile stores - Different fields shouldn't alias.
++    assertEquals($noinline$testVolatileStoreDifferentFields(new TestClass(), new TestClass()), 3);
++    assertEquals(
++            $noinline$testVolatileStoreDifferentFieldsBlocking(new TestClass(), new TestClass()),
++            3);
++
++    // Volatile stores - Redundant store.
++    assertEquals($noinline$testVolatileStoreRedundantStore(new TestClass()), 2);
++    assertEquals($noinline$testVolatileStoreRedundantStoreBlocking(new TestClass()), 2);
++    assertEquals($noinline$testVolatileStoreRedundantStoreBlockingOnlyLoad(new TestClass()), 2);
++
++    // Volatile stores - Set and merge values.
++    assertEquals($noinline$testVolatileStoreSetAndMergeValues(new TestClass(), true), 1);
++    assertEquals($noinline$testVolatileStoreSetAndMergeValues(new TestClass(), false), 2);
++    assertEquals($noinline$testVolatileStoreSetAndMergeValuesNotBlocking(new TestClass(), true), 1);
++    assertEquals($noinline$testVolatileStoreSetAndMergeValuesNotBlocking(new TestClass(), false), 2);
++
++    // Monitor Operations - Different fields shouldn't alias.
++    assertEquals(
++            $noinline$testMonitorOperationDifferentFields(new TestClass(), new TestClass()), 3);
++    assertEquals($noinline$testMonitorOperationDifferentFieldsBlocking(
++                          new TestClass(), new TestClass()),
++            3);
++
++    // Monitor Operations - Redundant store.
++    assertEquals($noinline$testMonitorOperationRedundantStore(new TestClass()), 2);
++    assertEquals($noinline$testMonitorOperationRedundantStoreBlocking(new TestClass()), 2);
++    assertEquals(
++            $noinline$testMonitorOperationRedundantStoreBlockingOnlyLoad(new TestClass()), 2);
++    assertEquals($noinline$testMonitorOperationRedundantStoreBlockingExit(new TestClass()), 2);
++
++    // Monitor Operations - Set and merge values.
++    assertEquals($noinline$testMonitorOperationSetAndMergeValues(new TestClass(), true), 1);
++    assertEquals($noinline$testMonitorOperationSetAndMergeValues(new TestClass(), false), 2);
++    assertEquals(
++            $noinline$testMonitorOperationSetAndMergeValuesBlocking(new TestClass(), true), 1);
++    assertEquals(
++            $noinline$testMonitorOperationSetAndMergeValuesBlocking(new TestClass(), false), 2);
++  }
++
++  public static void assertEquals(int expected, int result) {
++    if (expected != result) {
++      throw new Error("Expected: " + expected + ", found: " + result);
++    }
++  }
++
++  /// CHECK-START: int Main.$noinline$testVolatileAccessesMustBeKept(TestClass) load_store_elimination (before)
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldGet
++  /// CHECK: InstanceFieldGet
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldGet
++
++  /// CHECK-START: int Main.$noinline$testVolatileAccessesMustBeKept(TestClass) load_store_elimination (after)
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldGet
++  /// CHECK: InstanceFieldGet
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldGet
++  static int $noinline$testVolatileAccessesMustBeKept(TestClass obj1) {
++    int result;
++    obj1.vi = 3;
++    // Redundant load that has to be kept.
++    result = obj1.vi;
++    result = obj1.vi;
++    // Redundant store that has to be kept.
++    obj1.vi = 3;
++    result = obj1.vi;
++    return result;
++  }
++
++  /// CHECK-START: int Main.$noinline$testVolatileLoadDifferentFields(TestClass, TestClass) load_store_elimination (before)
++  /// CHECK: InstanceFieldGet field_name:TestClass.vi
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldGet field_name:TestClass.i
++  /// CHECK: InstanceFieldGet field_name:TestClass.j
++  /// CHECK: InstanceFieldGet field_name:TestClass.vi
++
++  /// CHECK-START: int Main.$noinline$testVolatileLoadDifferentFields(TestClass, TestClass) load_store_elimination (after)
++  /// CHECK: InstanceFieldGet field_name:TestClass.vi
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldGet field_name:TestClass.vi
++
++  /// CHECK-START: int Main.$noinline$testVolatileLoadDifferentFields(TestClass, TestClass) load_store_elimination (after)
++  /// CHECK-NOT: InstanceFieldGet field_name:TestClass.i
++
++  /// CHECK-START: int Main.$noinline$testVolatileLoadDifferentFields(TestClass, TestClass) load_store_elimination (after)
++  /// CHECK-NOT: InstanceFieldGet field_name:TestClass.j
++
++  // Unrelated volatile loads shouldn't block LSE.
++  static int $noinline$testVolatileLoadDifferentFields(TestClass obj1, TestClass obj2) {
++    int unused = obj1.vi;
++    obj1.i = 1;
++    obj2.j = 2;
++    int result = obj1.i + obj2.j;
++    unused = obj1.vi;
++    return result;
++  }
++
++  /// CHECK-START: int Main.$noinline$testVolatileLoadDifferentFieldsBlocking(TestClass, TestClass) load_store_elimination (before)
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldGet
++  /// CHECK: InstanceFieldGet
++  /// CHECK: InstanceFieldGet
++
++  /// CHECK-START: int Main.$noinline$testVolatileLoadDifferentFieldsBlocking(TestClass, TestClass) load_store_elimination (after)
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldGet
++  /// CHECK: InstanceFieldGet
++  /// CHECK: InstanceFieldGet
++
++  // A volatile load blocks load elimination.
++  static int $noinline$testVolatileLoadDifferentFieldsBlocking(TestClass obj1, TestClass obj2) {
++    obj1.i = 1;
++    obj2.j = 2;
++    int unused = obj1.vi;
++    return obj1.i + obj2.j;
++  }
++
++  /// CHECK-START: int Main.$noinline$testVolatileLoadRedundantStore(TestClass) load_store_elimination (before)
++  /// CHECK: InstanceFieldGet field_name:TestClass.vi
++  /// CHECK: InstanceFieldSet field_name:TestClass.j
++  /// CHECK: InstanceFieldSet field_name:TestClass.j
++  /// CHECK: InstanceFieldGet field_name:TestClass.j
++
++  /// CHECK-START: int Main.$noinline$testVolatileLoadRedundantStore(TestClass) load_store_elimination (after)
++  /// CHECK: InstanceFieldGet field_name:TestClass.vi
++
++  /// CHECK-START: int Main.$noinline$testVolatileLoadRedundantStore(TestClass) load_store_elimination (after)
++  /// CHECK:     InstanceFieldSet field_name:TestClass.j
++  /// CHECK-NOT: InstanceFieldSet field_name:TestClass.j
++
++  /// CHECK-START: int Main.$noinline$testVolatileLoadRedundantStore(TestClass) load_store_elimination (after)
++  /// CHECK-NOT: InstanceFieldGet field_name:TestClass.j
++  static int $noinline$testVolatileLoadRedundantStore(TestClass obj) {
++    int unused = obj.vi;
++    obj.j = 1;
++    obj.j = 2;
++    return obj.j;
++  }
++
++  /// CHECK-START: int Main.$noinline$testVolatileLoadRedundantStoreBlocking(TestClass) load_store_elimination (before)
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldGet
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldGet
++
++  /// CHECK-START: int Main.$noinline$testVolatileLoadRedundantStoreBlocking(TestClass) load_store_elimination (after)
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldGet field_name:TestClass.vi
++  /// CHECK: InstanceFieldSet
++
++  /// CHECK-START: int Main.$noinline$testVolatileLoadRedundantStoreBlocking(TestClass) load_store_elimination (after)
++  /// CHECK-NOT: InstanceFieldGet field_name:TestClass.j
++  static int $noinline$testVolatileLoadRedundantStoreBlocking(TestClass obj) {
++    // This store must be kept due to the volatile load.
++    obj.j = 1;
++    int unused = obj.vi;
++    obj.j = 2;
++    return obj.j;
++  }
++
++  /// CHECK-START: int Main.$noinline$testVolatileLoadRedundantStoreBlockingOnlyLoad(TestClass) load_store_elimination (before)
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldGet
++  /// CHECK: InstanceFieldGet
++
++  /// CHECK-START: int Main.$noinline$testVolatileLoadRedundantStoreBlockingOnlyLoad(TestClass) load_store_elimination (after)
++  /// CHECK:     InstanceFieldSet
++  /// CHECK-NOT: InstanceFieldSet
++
++  /// CHECK-START: int Main.$noinline$testVolatileLoadRedundantStoreBlockingOnlyLoad(TestClass) load_store_elimination (after)
++  /// CHECK: InstanceFieldGet
++  /// CHECK: InstanceFieldGet
++  static int $noinline$testVolatileLoadRedundantStoreBlockingOnlyLoad(TestClass obj) {
++    // This store can be safely removed.
++    obj.j = 1;
++    obj.j = 2;
++    int unused = obj.vi;
++    // This load remains due to the volatile load in the middle.
++    return obj.j;
++  }
++
++  /// CHECK-START: int Main.$noinline$testVolatileLoadSetAndMergeValues(TestClass, boolean) load_store_elimination (before)
++  /// CHECK-DAG: InstanceFieldSet
++  /// CHECK-DAG: InstanceFieldSet
++  /// CHECK-DAG: InstanceFieldGet field_name:TestClass.i
++  /// CHECK-DAG: InstanceFieldGet field_name:TestClass.vi
++  /// CHECK-DAG: InstanceFieldGet field_name:TestClass.vi
++
++  /// CHECK-START: int Main.$noinline$testVolatileLoadSetAndMergeValues(TestClass, boolean) load_store_elimination (after)
++  /// CHECK-DAG: InstanceFieldSet
++  /// CHECK-DAG: InstanceFieldSet
++  /// CHECK-DAG: InstanceFieldGet field_name:TestClass.vi
++  /// CHECK-DAG: InstanceFieldGet field_name:TestClass.vi
++
++  /// CHECK-START: int Main.$noinline$testVolatileLoadSetAndMergeValues(TestClass, boolean) load_store_elimination (after)
++  /// CHECK: Phi
++
++  /// CHECK-START: int Main.$noinline$testVolatileLoadSetAndMergeValues(TestClass, boolean) load_store_elimination (after)
++  /// CHECK-NOT: InstanceFieldGet field_name:TestClass.i
++
++  static int $noinline$testVolatileLoadSetAndMergeValues(TestClass obj, boolean b) {
++    if (b) {
++      int unused = obj.vi;
++      obj.i = 1;
++    } else {
++      int unused = obj.vi;
++      obj.i = 2;
++    }
++    return obj.i;
++  }
++
++  /// CHECK-START: int Main.$noinline$testVolatileLoadSetAndMergeValuesBlocking(TestClass, boolean) load_store_elimination (before)
++  /// CHECK-DAG: InstanceFieldSet
++  /// CHECK-DAG: InstanceFieldSet
++  /// CHECK-DAG: InstanceFieldGet field_name:TestClass.i
++  /// CHECK-DAG: InstanceFieldGet field_name:TestClass.vi
++
++  /// CHECK-START: int Main.$noinline$testVolatileLoadSetAndMergeValuesBlocking(TestClass, boolean) load_store_elimination (after)
++  /// CHECK-DAG: InstanceFieldSet
++  /// CHECK-DAG: InstanceFieldSet
++  /// CHECK-DAG: InstanceFieldGet field_name:TestClass.vi
++
++  /// CHECK-START: int Main.$noinline$testVolatileLoadSetAndMergeValuesBlocking(TestClass, boolean) load_store_elimination (after)
++  /// CHECK-NOT: Phi
++
++  /// CHECK-START: int Main.$noinline$testVolatileLoadSetAndMergeValuesBlocking(TestClass, boolean) load_store_elimination (after)
++  /// CHECK: InstanceFieldGet
++
++  static int $noinline$testVolatileLoadSetAndMergeValuesBlocking(TestClass obj, boolean b) {
++    if (b) {
++      obj.i = 1;
++    } else {
++      obj.i = 2;
++    }
++    int unused = obj.vi;
++    return obj.i;
++  }
++
++  /// CHECK-START: int Main.$noinline$testVolatileStoreDifferentFields(TestClass, TestClass) load_store_elimination (before)
++  /// CHECK: InstanceFieldSet field_name:TestClass.vi
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldGet field_name:TestClass.i
++  /// CHECK: InstanceFieldGet field_name:TestClass.j
++  /// CHECK: InstanceFieldSet field_name:TestClass.vi
++
++  /// CHECK-START: int Main.$noinline$testVolatileStoreDifferentFields(TestClass, TestClass) load_store_elimination (after)
++  /// CHECK: InstanceFieldSet field_name:TestClass.vi
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldSet field_name:TestClass.vi
++
++  /// CHECK-START: int Main.$noinline$testVolatileStoreDifferentFields(TestClass, TestClass) load_store_elimination (after)
++  /// CHECK-NOT: InstanceFieldGet field_name:TestClass.i
++
++  /// CHECK-START: int Main.$noinline$testVolatileStoreDifferentFields(TestClass, TestClass) load_store_elimination (after)
++  /// CHECK-NOT: InstanceFieldGet field_name:TestClass.j
++
++  // Unrelated volatile stores shouldn't block LSE.
++  static int $noinline$testVolatileStoreDifferentFields(TestClass obj1, TestClass obj2) {
++    obj1.vi = 123;
++    obj1.i = 1;
++    obj2.j = 2;
++    int result = obj1.i + obj2.j;
++    obj1.vi = 123;
++    return result;
++  }
++
++  /// CHECK-START: int Main.$noinline$testVolatileStoreDifferentFieldsBlocking(TestClass, TestClass) load_store_elimination (before)
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldGet
++  /// CHECK: InstanceFieldGet
++
++  /// CHECK-START: int Main.$noinline$testVolatileStoreDifferentFieldsBlocking(TestClass, TestClass) load_store_elimination (after)
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldSet
++
++  /// CHECK-START: int Main.$noinline$testVolatileStoreDifferentFieldsBlocking(TestClass, TestClass) load_store_elimination (after)
++  /// CHECK-NOT: InstanceFieldGet
++
++  // A volatile store doesn't block load elimination, as it doesn't clobber existing values.
++  static int $noinline$testVolatileStoreDifferentFieldsBlocking(TestClass obj1, TestClass obj2) {
++    obj1.i = 1;
++    obj2.j = 2;
++    obj1.vi = 123;
++    return obj1.i + obj2.j;
++  }
++
++  /// CHECK-START: int Main.$noinline$testVolatileStoreRedundantStore(TestClass) load_store_elimination (before)
++  /// CHECK: InstanceFieldSet field_name:TestClass.vi
++  /// CHECK: InstanceFieldSet field_name:TestClass.j
++  /// CHECK: InstanceFieldSet field_name:TestClass.j
++  /// CHECK: InstanceFieldGet
++
++  /// CHECK-START: int Main.$noinline$testVolatileStoreRedundantStore(TestClass) load_store_elimination (after)
++  /// CHECK: InstanceFieldSet field_name:TestClass.vi
++  /// CHECK:     InstanceFieldSet field_name:TestClass.j
++  /// CHECK-NOT: InstanceFieldSet field_name:TestClass.j
++
++  /// CHECK-START: int Main.$noinline$testVolatileStoreRedundantStore(TestClass) load_store_elimination (after)
++  /// CHECK-NOT: InstanceFieldGet
++  static int $noinline$testVolatileStoreRedundantStore(TestClass obj) {
++    obj.vi = 123;
++    obj.j = 1;
++    obj.j = 2;
++    return obj.j;
++  }
++
++  /// CHECK-START: int Main.$noinline$testVolatileStoreRedundantStoreBlocking(TestClass) load_store_elimination (before)
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldGet
++
++  /// CHECK-START: int Main.$noinline$testVolatileStoreRedundantStoreBlocking(TestClass) load_store_elimination (after)
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldSet
++
++  /// CHECK-START: int Main.$noinline$testVolatileStoreRedundantStoreBlocking(TestClass) load_store_elimination (after)
++  /// CHECK-NOT: InstanceFieldGet
++  static int $noinline$testVolatileStoreRedundantStoreBlocking(TestClass obj) {
++    // This store must be kept due to the volatile store.
++    obj.j = 1;
++    obj.vi = 123;
++    obj.j = 2;
++    return obj.j;
++  }
++
++  /// CHECK-START: int Main.$noinline$testVolatileStoreRedundantStoreBlockingOnlyLoad(TestClass) load_store_elimination (before)
++  /// CHECK: InstanceFieldSet field_name:TestClass.j
++  /// CHECK: InstanceFieldSet field_name:TestClass.j
++  /// CHECK: InstanceFieldSet field_name:TestClass.vi
++  /// CHECK: InstanceFieldGet
++
++  /// CHECK-START: int Main.$noinline$testVolatileStoreRedundantStoreBlockingOnlyLoad(TestClass) load_store_elimination (after)
++  /// CHECK:     InstanceFieldSet field_name:TestClass.j
++  /// CHECK-NOT: InstanceFieldSet field_name:TestClass.j
++
++  /// CHECK-START: int Main.$noinline$testVolatileStoreRedundantStoreBlockingOnlyLoad(TestClass) load_store_elimination (after)
++  /// CHECK: InstanceFieldSet field_name:TestClass.vi
++
++  /// CHECK-START: int Main.$noinline$testVolatileStoreRedundantStoreBlockingOnlyLoad(TestClass) load_store_elimination (after)
++  /// CHECK-NOT: InstanceFieldGet
++  static int $noinline$testVolatileStoreRedundantStoreBlockingOnlyLoad(TestClass obj) {
++    // This store can be safely removed.
++    obj.j = 1;
++    obj.j = 2;
++    obj.vi = 123;
++    // This load can also be safely eliminated as the volatile store doesn't clobber values.
++    return obj.j;
++  }
++
++  /// CHECK-START: int Main.$noinline$testVolatileStoreSetAndMergeValues(TestClass, boolean) load_store_elimination (before)
++  /// CHECK-DAG: InstanceFieldSet
++  /// CHECK-DAG: InstanceFieldSet
++  /// CHECK-DAG: InstanceFieldSet
++  /// CHECK-DAG: InstanceFieldSet
++  /// CHECK-DAG: InstanceFieldGet
++
++  /// CHECK-START: int Main.$noinline$testVolatileStoreSetAndMergeValues(TestClass, boolean) load_store_elimination (after)
++  /// CHECK-DAG: InstanceFieldSet
++  /// CHECK-DAG: InstanceFieldSet
++  /// CHECK-DAG: InstanceFieldSet
++  /// CHECK-DAG: InstanceFieldSet
++
++  /// CHECK-START: int Main.$noinline$testVolatileStoreSetAndMergeValues(TestClass, boolean) load_store_elimination (after)
++  /// CHECK: Phi
++
++  /// CHECK-START: int Main.$noinline$testVolatileStoreSetAndMergeValues(TestClass, boolean) load_store_elimination (after)
++  /// CHECK-NOT: InstanceFieldGet
++  static int $noinline$testVolatileStoreSetAndMergeValues(TestClass obj, boolean b) {
++    if (b) {
++      obj.vi = 123;
++      obj.i = 1;
++    } else {
++      obj.vi = 123;
++      obj.i = 2;
++    }
++    return obj.i;
++  }
++
++  /// CHECK-START: int Main.$noinline$testVolatileStoreSetAndMergeValuesNotBlocking(TestClass, boolean) load_store_elimination (before)
++  /// CHECK-DAG: InstanceFieldSet
++  /// CHECK-DAG: InstanceFieldSet
++  /// CHECK-DAG: InstanceFieldSet
++  /// CHECK-DAG: InstanceFieldGet
++
++  /// CHECK-START: int Main.$noinline$testVolatileStoreSetAndMergeValuesNotBlocking(TestClass, boolean) load_store_elimination (after)
++  /// CHECK-DAG: InstanceFieldSet
++  /// CHECK-DAG: InstanceFieldSet
++  /// CHECK-DAG: InstanceFieldSet
++
++  /// CHECK-START: int Main.$noinline$testVolatileStoreSetAndMergeValues(TestClass, boolean) load_store_elimination (after)
++  /// CHECK: Phi
++
++  /// CHECK-START: int Main.$noinline$testVolatileStoreSetAndMergeValues(TestClass, boolean) load_store_elimination (after)
++  /// CHECK-NOT: InstanceFieldGet
++  static int $noinline$testVolatileStoreSetAndMergeValuesNotBlocking(TestClass obj, boolean b) {
++    if (b) {
++      obj.i = 1;
++    } else {
++      obj.i = 2;
++    }
++    // This volatile store doesn't block the load elimination
++    obj.vi = 123;
++    return obj.i;
++  }
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationDifferentFields(TestClass, TestClass) load_store_elimination (before)
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldGet
++  /// CHECK: InstanceFieldGet
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationDifferentFields(TestClass, TestClass) load_store_elimination (before)
++  /// CHECK: MonitorOperation kind:enter
++  /// CHECK: MonitorOperation kind:exit
++  /// CHECK: MonitorOperation kind:enter
++  /// CHECK: MonitorOperation kind:exit
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationDifferentFields(TestClass, TestClass) load_store_elimination (after)
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldSet
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationDifferentFields(TestClass, TestClass) load_store_elimination (after)
++  /// CHECK-NOT: InstanceFieldGet
++
++  // Unrelated monitor operations shouldn't block LSE.
++  static int $noinline$testMonitorOperationDifferentFields(TestClass obj1, TestClass obj2) {
++    Main m = new Main();
++    synchronized (m) {}
++
++    obj1.i = 1;
++    obj2.j = 2;
++    int result = obj1.i + obj2.j;
++
++    synchronized (m) {}
++
++    return result;
++  }
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationDifferentFieldsBlocking(TestClass, TestClass) load_store_elimination (before)
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldGet
++  /// CHECK: InstanceFieldGet
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationDifferentFieldsBlocking(TestClass, TestClass) load_store_elimination (before)
++  /// CHECK: MonitorOperation kind:enter
++  /// CHECK: MonitorOperation kind:exit
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationDifferentFieldsBlocking(TestClass, TestClass) load_store_elimination (after)
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldGet
++  /// CHECK: InstanceFieldGet
++
++  // A synchronized operation blocks loads.
++  static int $noinline$testMonitorOperationDifferentFieldsBlocking(TestClass obj1, TestClass obj2) {
++    Main m = new Main();
++
++    obj1.i = 1;
++    obj2.j = 2;
++    synchronized (m) {
++      return obj1.i + obj2.j;
++    }
++  }
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationRedundantStore(TestClass) load_store_elimination (before)
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldGet
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationRedundantStore(TestClass) load_store_elimination (before)
++  /// CHECK: MonitorOperation kind:enter
++  /// CHECK: MonitorOperation kind:exit
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationRedundantStore(TestClass) load_store_elimination (after)
++  /// CHECK:     InstanceFieldSet
++  /// CHECK-NOT: InstanceFieldSet
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationRedundantStore(TestClass) load_store_elimination (after)
++  /// CHECK-NOT: InstanceFieldGet
++
++  static int $noinline$testMonitorOperationRedundantStore(TestClass obj) {
++    Main m = new Main();
++    synchronized (m) {
++      obj.j = 1;
++      obj.j = 2;
++    }
++
++    return obj.j;
++  }
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationRedundantStoreBlocking(TestClass) load_store_elimination (before)
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldGet
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationRedundantStoreBlocking(TestClass) load_store_elimination (before)
++  /// CHECK: MonitorOperation kind:enter
++  /// CHECK: MonitorOperation kind:exit
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationRedundantStoreBlocking(TestClass) load_store_elimination (after)
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldSet
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationRedundantStoreBlocking(TestClass) load_store_elimination (after)
++  /// CHECK-NOT: InstanceFieldGet
++
++  static int $noinline$testMonitorOperationRedundantStoreBlocking(TestClass obj) {
++    Main m = new Main();
++
++    // This store must be kept due to the monitor operation.
++    obj.j = 1;
++    synchronized (m) {}
++    obj.j = 2;
++
++    return obj.j;
++  }
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationRedundantStoreBlockingOnlyLoad(TestClass) load_store_elimination (before)
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldGet
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationRedundantStoreBlockingOnlyLoad(TestClass) load_store_elimination (before)
++  /// CHECK: MonitorOperation kind:enter
++  /// CHECK: MonitorOperation kind:exit
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationRedundantStoreBlockingOnlyLoad(TestClass) load_store_elimination (after)
++  /// CHECK:     InstanceFieldSet
++  /// CHECK-NOT: InstanceFieldSet
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationRedundantStoreBlockingOnlyLoad(TestClass) load_store_elimination (after)
++  /// CHECK: InstanceFieldGet
++
++  static int $noinline$testMonitorOperationRedundantStoreBlockingOnlyLoad(TestClass obj) {
++    Main m = new Main();
++
++    // This store can be safely removed.
++    obj.j = 1;
++    obj.j = 2;
++    synchronized (m) {}
++
++    // This load remains due to the monitor operation.
++    return obj.j;
++  }
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationRedundantStoreBlockingExit(TestClass) load_store_elimination (before)
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldSet
++  /// CHECK: InstanceFieldGet
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationRedundantStoreBlockingExit(TestClass) load_store_elimination (before)
++  /// CHECK: MonitorOperation kind:enter
++  /// CHECK: MonitorOperation kind:exit
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationRedundantStoreBlockingExit(TestClass) load_store_elimination (after)
++  /// CHECK:     InstanceFieldSet
++  /// CHECK:     InstanceFieldSet
++  /// CHECK-NOT: InstanceFieldSet
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationRedundantStoreBlockingExit(TestClass) load_store_elimination (after)
++  /// CHECK-NOT: InstanceFieldGet
++
++  static int $noinline$testMonitorOperationRedundantStoreBlockingExit(TestClass obj) {
++    Main m = new Main();
++
++    synchronized (m) {
++      // This store can be removed.
++      obj.j = 0;
++      // This store must be kept due to the monitor exit operation.
++      obj.j = 1;
++    }
++    obj.j = 2;
++
++    return obj.j;
++  }
++
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationSetAndMergeValues(TestClass, boolean) load_store_elimination (before)
++  /// CHECK-DAG: InstanceFieldSet
++  /// CHECK-DAG: InstanceFieldSet
++  /// CHECK-DAG: InstanceFieldGet
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationSetAndMergeValues(TestClass, boolean) load_store_elimination (after)
++  /// CHECK-DAG: InstanceFieldSet
++  /// CHECK-DAG: InstanceFieldSet
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationSetAndMergeValues(TestClass, boolean) load_store_elimination (before)
++  /// CHECK-DAG: MonitorOperation kind:enter
++  /// CHECK-DAG: MonitorOperation kind:exit
++  /// CHECK-DAG: MonitorOperation kind:enter
++  /// CHECK-DAG: MonitorOperation kind:exit
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationSetAndMergeValues(TestClass, boolean) load_store_elimination (after)
++  /// CHECK: Phi
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationSetAndMergeValues(TestClass, boolean) load_store_elimination (after)
++  /// CHECK-NOT: InstanceFieldGet
++
++  static int $noinline$testMonitorOperationSetAndMergeValues(TestClass obj, boolean b) {
++    Main m = new Main();
++
++    if (b) {
++      synchronized (m) {}
++      obj.i = 1;
++    } else {
++      synchronized (m) {}
++      obj.i = 2;
++    }
++    return obj.i;
++  }
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationSetAndMergeValuesBlocking(TestClass, boolean) load_store_elimination (before)
++  /// CHECK-DAG: InstanceFieldSet
++  /// CHECK-DAG: InstanceFieldSet
++  /// CHECK-DAG: InstanceFieldGet
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationSetAndMergeValuesBlocking(TestClass, boolean) load_store_elimination (after)
++  /// CHECK-DAG: InstanceFieldSet
++  /// CHECK-DAG: InstanceFieldSet
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationSetAndMergeValuesBlocking(TestClass, boolean) load_store_elimination (before)
++  /// CHECK-DAG: MonitorOperation kind:enter
++  /// CHECK-DAG: MonitorOperation kind:exit
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationSetAndMergeValuesBlocking(TestClass, boolean) load_store_elimination (after)
++  /// CHECK-NOT: Phi
++
++  /// CHECK-START: int Main.$noinline$testMonitorOperationSetAndMergeValuesBlocking(TestClass, boolean) load_store_elimination (after)
++  /// CHECK: InstanceFieldGet
++
++  static int $noinline$testMonitorOperationSetAndMergeValuesBlocking(TestClass obj, boolean b) {
++    Main m = new Main();
++
++    if (b) {
++      obj.i = 1;
++    } else {
++      obj.i = 2;
++    }
++    synchronized (m) {}
++    return obj.i;
++  }
++}
+-- 
+2.42.0
+

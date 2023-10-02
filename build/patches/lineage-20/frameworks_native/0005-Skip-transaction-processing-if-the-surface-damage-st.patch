@@ -1,0 +1,30 @@
+From 9a9e151f3f487ac7d6be3eac279d7b2d4c49947a Mon Sep 17 00:00:00 2001
+From: Sally Qi <sallyqi@google.com>
+Date: Tue, 14 Mar 2023 16:47:39 +0000
+Subject: [PATCH 5/8] Skip transaction processing if the surface damage stays
+ the same in Layer::setSurfaceDamageRegion.
+
+Bug: 273143519
+Bug: 273149531
+Test: builds
+Change-Id: Id4df40e869c2735ab7049eb50f07b81f56024001
+Merged-In: Id4df40e869c2735ab7049eb50f07b81f56024001
+---
+ services/surfaceflinger/BufferStateLayer.cpp | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/services/surfaceflinger/BufferStateLayer.cpp b/services/surfaceflinger/BufferStateLayer.cpp
+index 3875f151cb..e06f3c4d42 100644
+--- a/services/surfaceflinger/BufferStateLayer.cpp
++++ b/services/surfaceflinger/BufferStateLayer.cpp
+@@ -459,6 +459,7 @@ bool BufferStateLayer::setHdrMetadata(const HdrMetadata& hdrMetadata) {
+ }
+ 
+ bool BufferStateLayer::setSurfaceDamageRegion(const Region& surfaceDamage) {
++    if (mDrawingState.surfaceDamageRegion.hasSameRects(surfaceDamage)) return false;
+     mDrawingState.surfaceDamageRegion = surfaceDamage;
+     mDrawingState.modified = true;
+     setTransactionFlags(eTransactionNeeded);
+-- 
+2.42.0
+

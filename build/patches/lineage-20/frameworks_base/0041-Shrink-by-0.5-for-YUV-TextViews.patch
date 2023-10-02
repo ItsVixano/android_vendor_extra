@@ -1,0 +1,109 @@
+From 38f77d3df821b338fde2a2291f56272e698ce6a3 Mon Sep 17 00:00:00 2001
+From: John Reck <jreck@google.com>
+Date: Thu, 29 Sep 2022 13:19:54 -0400
+Subject: [PATCH 41/72] Shrink by 0.5 for YUV TextViews
+
+Matches the behavior of PixelCopy/Readback.cpp
+
+Bug: 248949805
+Test: build
+Change-Id: I82f34ba4d8eebf98e61670a88d9f8e427918087c
+---
+ libs/hwui/DeferredLayerUpdater.cpp        |  3 +++
+ libs/hwui/Layer.h                         |  6 +++++
+ libs/hwui/pipeline/skia/LayerDrawable.cpp | 27 +++++++++++++++++++++++
+ 3 files changed, 36 insertions(+)
+
+diff --git a/libs/hwui/DeferredLayerUpdater.cpp b/libs/hwui/DeferredLayerUpdater.cpp
+index a5c09245..b763a96e 100644
+--- a/libs/hwui/DeferredLayerUpdater.cpp
++++ b/libs/hwui/DeferredLayerUpdater.cpp
+@@ -169,6 +169,8 @@ void DeferredLayerUpdater::apply() {
+                 sk_sp<SkImage> layerImage = mImageSlots[slot].createIfNeeded(
+                         hardwareBuffer, dataspace, newContent,
+                         mRenderState.getRenderThread().getGrContext());
++                AHardwareBuffer_Desc bufferDesc;
++                AHardwareBuffer_describe(hardwareBuffer, &bufferDesc);
+                 // unref to match the ref added by ASurfaceTexture_dequeueBuffer. eglCreateImageKHR
+                 // (invoked by createIfNeeded) will add a ref to the AHardwareBuffer.
+                 AHardwareBuffer_release(hardwareBuffer);
+@@ -189,6 +191,7 @@ void DeferredLayerUpdater::apply() {
+                         maxLuminanceNits =
+                                 std::max(cta861_3.maxContentLightLevel, maxLuminanceNits);
+                     }
++                    mLayer->setBufferFormat(bufferDesc.format);
+                     updateLayer(forceFilter, layerImage, outTransform, currentCropRect,
+                                 maxLuminanceNits);
+                 }
+diff --git a/libs/hwui/Layer.h b/libs/hwui/Layer.h
+index 47eb5d3b..345749b6 100644
+--- a/libs/hwui/Layer.h
++++ b/libs/hwui/Layer.h
+@@ -102,6 +102,10 @@ public:
+ 
+     inline float getMaxLuminanceNits() { return mMaxLuminanceNits; }
+ 
++    void setBufferFormat(uint32_t format) { mBufferFormat = format; }
++
++    uint32_t getBufferFormat() const { return mBufferFormat; }
++
+     void draw(SkCanvas* canvas);
+ 
+ protected:
+@@ -169,6 +173,8 @@ private:
+      */
+     float mMaxLuminanceNits = -1;
+ 
++    uint32_t mBufferFormat = 0;
++
+ };  // struct Layer
+ 
+ }  // namespace uirenderer
+diff --git a/libs/hwui/pipeline/skia/LayerDrawable.cpp b/libs/hwui/pipeline/skia/LayerDrawable.cpp
+index 2fba13c3..3ba54092 100644
+--- a/libs/hwui/pipeline/skia/LayerDrawable.cpp
++++ b/libs/hwui/pipeline/skia/LayerDrawable.cpp
+@@ -107,6 +107,32 @@ static bool isHdrDataspace(ui::Dataspace dataspace) {
+     return transfer == HAL_DATASPACE_TRANSFER_ST2084 || transfer == HAL_DATASPACE_TRANSFER_HLG;
+ }
+ 
++static void adjustCropForYUV(uint32_t format, int bufferWidth, int bufferHeight, SkRect* cropRect) {
++    // Chroma channels of YUV420 images are subsampled we may need to shrink the crop region by
++    // a whole texel on each side. Since skia still adds its own 0.5 inset, we apply an
++    // additional 0.5 inset. See GLConsumer::computeTransformMatrix for details.
++    float shrinkAmount = 0.0f;
++    switch (format) {
++        // Use HAL formats since some AHB formats are only available in vndk
++        case HAL_PIXEL_FORMAT_YCBCR_420_888:
++        case HAL_PIXEL_FORMAT_YV12:
++        case HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED:
++            shrinkAmount = 0.5f;
++            break;
++        default:
++            break;
++    }
++
++    // Shrink the crop if it has more than 1-px and differs from the buffer size.
++    if (cropRect->width() > 1 && cropRect->width() < bufferWidth) {
++        cropRect->inset(shrinkAmount, 0);
++    }
++
++    if (cropRect->height() > 1 && cropRect->height() < bufferHeight) {
++        cropRect->inset(0, shrinkAmount);
++    }
++}
++
+ // TODO: Context arg probably doesn't belong here – do debug check at callsite instead.
+ bool LayerDrawable::DrawLayer(GrRecordingContext* context,
+                               SkCanvas* canvas,
+@@ -142,6 +168,7 @@ bool LayerDrawable::DrawLayer(GrRecordingContext* context,
+         SkRect skiaSrcRect;
+         if (srcRect && !srcRect->isEmpty()) {
+             skiaSrcRect = *srcRect;
++            adjustCropForYUV(layer->getBufferFormat(), imageWidth, imageHeight, &skiaSrcRect);
+         } else {
+             skiaSrcRect = SkRect::MakeIWH(imageWidth, imageHeight);
+         }
+-- 
+2.42.0
+

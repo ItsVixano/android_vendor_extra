@@ -1,0 +1,148 @@
+From b06539ee1c9765b488668505c6fb222a9b6d5d15 Mon Sep 17 00:00:00 2001
+From: Nicolas Geoffray <ngeoffray@google.com>
+Date: Wed, 29 Jun 2022 09:36:23 +0100
+Subject: [PATCH 12/30] Make LoadMethod{Handle,Type} instruction throwing.
+
+Bug: 235576668
+Test: 979-const-method-handle
+Change-Id: Ia0077ea6c050adc33d109195177b3fc61236a876
+---
+ compiler/optimizing/load_store_elimination.cc |  8 +++
+ compiler/optimizing/nodes.h                   |  8 +++
+ test/979-const-method-handle/javac_wrapper.sh |  3 ++
+ test/979-const-method-handle/src/Main.java    | 50 +++++++++++++++++++
+ 4 files changed, 69 insertions(+)
+
+diff --git a/compiler/optimizing/load_store_elimination.cc b/compiler/optimizing/load_store_elimination.cc
+index 9b8f07e969..a201d997d8 100644
+--- a/compiler/optimizing/load_store_elimination.cc
++++ b/compiler/optimizing/load_store_elimination.cc
+@@ -1137,6 +1137,14 @@ class LSEVisitor final : private HGraphDelegateVisitor {
+     }
+   }
+ 
++  void VisitLoadMethodHandle(HLoadMethodHandle* load_method_handle) override {
++    HandleThrowingInstruction(load_method_handle);
++  }
++
++  void VisitLoadMethodType(HLoadMethodType* load_method_type) override {
++    HandleThrowingInstruction(load_method_type);
++  }
++
+   void VisitStringBuilderAppend(HStringBuilderAppend* sb_append) override {
+     HandleThrowingInstruction(sb_append);
+   }
+diff --git a/compiler/optimizing/nodes.h b/compiler/optimizing/nodes.h
+index 7a0059f616..a56dfd5f26 100644
+--- a/compiler/optimizing/nodes.h
++++ b/compiler/optimizing/nodes.h
+@@ -7222,6 +7222,10 @@ class HLoadMethodHandle final : public HInstruction {
+     return SideEffects::CanTriggerGC();
+   }
+ 
++  bool CanThrow() const override { return true; }
++
++  bool NeedsEnvironment() const override { return true; }
++
+   DECLARE_INSTRUCTION(LoadMethodHandle);
+ 
+  protected:
+@@ -7266,6 +7270,10 @@ class HLoadMethodType final : public HInstruction {
+     return SideEffects::CanTriggerGC();
+   }
+ 
++  bool CanThrow() const override { return true; }
++
++  bool NeedsEnvironment() const override { return true; }
++
+   DECLARE_INSTRUCTION(LoadMethodType);
+ 
+  protected:
+diff --git a/test/979-const-method-handle/javac_wrapper.sh b/test/979-const-method-handle/javac_wrapper.sh
+index 77b6bc3a6f..8322ba53c1 100755
+--- a/test/979-const-method-handle/javac_wrapper.sh
++++ b/test/979-const-method-handle/javac_wrapper.sh
+@@ -32,3 +32,6 @@ for class in intermediate-classes/*.class ; do
+   transformed_class=classes/$(basename ${class})
+   ${JAVA:-java} ${transformer_args} ${class} ${transformed_class}
+ done
++
++# Remove class which we want missing at runtime.
++rm classes/MissingType.class
+diff --git a/test/979-const-method-handle/src/Main.java b/test/979-const-method-handle/src/Main.java
+index 5368a22b21..04d782b167 100644
+--- a/test/979-const-method-handle/src/Main.java
++++ b/test/979-const-method-handle/src/Main.java
+@@ -72,6 +72,14 @@ class Main {
+         return null;
+     }
+ 
++    @ConstantMethodType(
++            returnType = void.class,
++            parameterTypes = {MissingType.class})
++    private static MethodType missingType() {
++        unreachable();
++        return null;
++    }
++
+     private static void repeatConstMethodType0(MethodType expected) {
+         System.out.print("repeatConstMethodType0(");
+         System.out.print(expected);
+@@ -189,6 +197,16 @@ class Main {
+         return null;
+     }
+ 
++    @ConstantMethodHandle(
++            kind = ConstantMethodHandle.STATIC_GET,
++            owner = "PrivateMember",
++            fieldOrMethodName = "privateField",
++            descriptor = "I")
++    private static MethodHandle getPrivateField() {
++        unreachable();
++        return null;
++    }
++
+     private static void repeatConstMethodHandle() throws Throwable {
+         System.out.println("repeatConstMethodHandle()");
+         String[] values = {"A", "B", "C"};
+@@ -243,5 +261,37 @@ class Main {
+         System.out.println("Stack: capacity was " + stack.capacity());
+         stackTrim().invokeExact(stack);
+         System.out.println("Stack: capacity is " + stack.capacity());
++
++        // We used to not report in the compiler that loading a ConstMethodHandle/ConstMethodType
++        // can throw, which meant we were not catching the exception in the situation where we
++        // inline the loading.
++        try {
++          $inline$getPrivateField();
++          throw new Error("Expected IllegalAccessError");
++        } catch (IllegalAccessError e) {
++          // expected
++        }
++
++        try {
++          $inline$missingType();
++          throw new Error("Expected NoClassDefFoundError");
++        } catch (NoClassDefFoundError e) {
++          // expected
++        }
++    }
++
++    public static void $inline$getPrivateField() {
++      getPrivateField();
+     }
++
++    public static void $inline$missingType() {
++      missingType();
++    }
++}
++
++class PrivateMember {
++  private static int privateField;
++}
++
++class MissingType {
+ }
+-- 
+2.42.0
+

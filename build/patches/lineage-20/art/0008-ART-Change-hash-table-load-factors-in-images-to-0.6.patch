@@ -1,0 +1,43 @@
+From c0649cc1164b2506460a89ba6e16b3e7f4a6f121 Mon Sep 17 00:00:00 2001
+From: Vladimir Marko <vmarko@google.com>
+Date: Wed, 21 Sep 2022 12:16:58 +0000
+Subject: [PATCH 08/30] ART: Change hash table load factors in images to 0.6.
+
+Use 0.6 for both interned strings and class table. This
+provides a better trade-off between performance and memory
+use than the previous value 0.7.
+
+Test: m test-art-host-gtest
+Test: testrunner.py --host --optimizing
+Bug: 175869411
+Bug: 243310398
+Change-Id: Ica7eaf21714dffc4c54c850cd8129e99a7dff648
+---
+ dex2oat/linker/image_writer.cc | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/dex2oat/linker/image_writer.cc b/dex2oat/linker/image_writer.cc
+index 56fbe9013b..c739ffb7b1 100644
+--- a/dex2oat/linker/image_writer.cc
++++ b/dex2oat/linker/image_writer.cc
+@@ -101,7 +101,7 @@ constexpr double kImageClassTableMinLoadFactor = 0.5;
+ // to make them full. We never insert additional elements to them, so we do not want to waste
+ // extra memory. And unlike runtime class tables, we do not want this to depend on runtime
+ // properties (see `Runtime::GetHashTableMaxLoadFactor()` checking for low memory mode).
+-constexpr double kImageClassTableMaxLoadFactor = 0.7;
++constexpr double kImageClassTableMaxLoadFactor = 0.6;
+ 
+ // The actual value of `kImageInternTableMinLoadFactor` is irrelevant because image intern tables
+ // are never resized, but we still need to pass a reasonable value to the constructor.
+@@ -110,7 +110,7 @@ constexpr double kImageInternTableMinLoadFactor = 0.5;
+ // to make them full. We never insert additional elements to them, so we do not want to waste
+ // extra memory. And unlike runtime intern tables, we do not want this to depend on runtime
+ // properties (see `Runtime::GetHashTableMaxLoadFactor()` checking for low memory mode).
+-constexpr double kImageInternTableMaxLoadFactor = 0.7;
++constexpr double kImageInternTableMaxLoadFactor = 0.6;
+ 
+ static ArrayRef<const uint8_t> MaybeCompressData(ArrayRef<const uint8_t> source,
+                                                  ImageHeader::StorageMode image_storage_mode,
+-- 
+2.42.0
+

@@ -1,0 +1,25 @@
+From a6d4d4d1b0da102b9c6e13901f203c1f510b95b8 Mon Sep 17 00:00:00 2001
+From: June <june@eridan.me>
+Date: Thu, 28 Apr 2022 23:44:04 -0400
+Subject: [PATCH 29/72] Remove build fingerprint from screenshot EXIF
+
+Signed-off-by: June <june@eridan.me>
+---
+ .../src/com/android/systemui/screenshot/ImageExporter.java       | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/packages/SystemUI/src/com/android/systemui/screenshot/ImageExporter.java b/packages/SystemUI/src/com/android/systemui/screenshot/ImageExporter.java
+index 898f58d3..8b642f66 100644
+--- a/packages/SystemUI/src/com/android/systemui/screenshot/ImageExporter.java
++++ b/packages/SystemUI/src/com/android/systemui/screenshot/ImageExporter.java
+@@ -406,7 +406,6 @@ public class ImageExporter {
+             ZonedDateTime captureTime) {
+         exif.setAttribute(ExifInterface.TAG_IMAGE_UNIQUE_ID, uniqueId.toString());
+ 
+-        exif.setAttribute(ExifInterface.TAG_SOFTWARE, "Android " + Build.DISPLAY);
+         exif.setAttribute(ExifInterface.TAG_IMAGE_WIDTH, Integer.toString(width));
+         exif.setAttribute(ExifInterface.TAG_IMAGE_LENGTH, Integer.toString(height));
+ 
+-- 
+2.42.0
+

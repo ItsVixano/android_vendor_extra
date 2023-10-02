@@ -1,0 +1,43 @@
+From 1cd35f871635efa5c91b1c93bcaacaf398d0c093 Mon Sep 17 00:00:00 2001
+From: Kwangkyu Park <kk48.park@samsung.com>
+Date: Thu, 17 Nov 2022 12:11:01 +0900
+Subject: [PATCH 6/8] Fix unintended buffer canceling
+
+If 'batched dequeue' fails Surface reverts by calling batched cancel
+buffer. However, 'slot' has meaningless information as 'batched dequeue'
+failed in the previous step. It leads to the unintended buffer canceling
+on the slot 0, if the transaction involves H2B/B2H converter.
+
+Bug: 259493167
+Test: atest libgui_test
+Change-Id: Ia29605fe1e26ef00b94cc6c08a2310b9c095567f
+---
+ libs/gui/Surface.cpp | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/libs/gui/Surface.cpp b/libs/gui/Surface.cpp
+index 4c8079265a..7928c097d3 100644
+--- a/libs/gui/Surface.cpp
++++ b/libs/gui/Surface.cpp
+@@ -792,11 +792,15 @@ int Surface::dequeueBuffers(std::vector<BatchBuffer>* buffers) {
+         return result;
+     }
+ 
+-    std::vector<CancelBufferInput> cancelBufferInputs(numBufferRequested);
++    std::vector<CancelBufferInput> cancelBufferInputs;
++    cancelBufferInputs.reserve(numBufferRequested);
+     std::vector<status_t> cancelBufferOutputs;
+     for (size_t i = 0; i < numBufferRequested; i++) {
+-        cancelBufferInputs[i].slot = dequeueOutput[i].slot;
+-        cancelBufferInputs[i].fence = dequeueOutput[i].fence;
++        if (dequeueOutput[i].result >= 0) {
++            CancelBufferInput& input = cancelBufferInputs.emplace_back();
++            input.slot = dequeueOutput[i].slot;
++            input.fence = dequeueOutput[i].fence;
++        }
+     }
+ 
+     for (const auto& output : dequeueOutput) {
+-- 
+2.42.0
+

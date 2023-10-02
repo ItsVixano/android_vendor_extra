@@ -1,0 +1,31 @@
+From afb65e361c0f452bf99dd438efff3ab99ab9306a Mon Sep 17 00:00:00 2001
+From: Till Kottmann <till.kottmann@bison-group.com>
+Date: Fri, 24 Aug 2018 08:56:47 +0200
+Subject: [PATCH 26/72] (Point) Only calculate sin and cos once
+
+Change-Id: I6157d91ca93a771b32bd2c3b859c19ed42efa469
+Signed-off-by: Pranav <npv12@iitbbs.ac.in>
+---
+ .../mca/filterfw/java/android/filterfw/geometry/Point.java  | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/media/mca/filterfw/java/android/filterfw/geometry/Point.java b/media/mca/filterfw/java/android/filterfw/geometry/Point.java
+index 96d2d7b0..c38d7765 100644
+--- a/media/mca/filterfw/java/android/filterfw/geometry/Point.java
++++ b/media/mca/filterfw/java/android/filterfw/geometry/Point.java
+@@ -101,9 +101,9 @@ public class Point {
+     }
+ 
+     public Point rotated(float radians) {
+-        // TODO(renn): Optimize: Keep cache of cos/sin values
+-        return new Point((float)(Math.cos(radians) * x - Math.sin(radians) * y),
+-                         (float)(Math.sin(radians) * x + Math.cos(radians) * y));
++        double cos = Math.cos(radians);
++        double sin = Math.sin(radians);
++        return new Point((float)(cos * x - sin * y), (float)(sin * x + cos * y));
+     }
+ 
+     public Point rotatedAround(Point center, float radians) {
+-- 
+2.42.0
+

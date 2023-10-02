@@ -1,0 +1,81 @@
+From 747ea1ee30969b418bfc4f82490ffcdca4b1038c Mon Sep 17 00:00:00 2001
+From: "pioush.kumar-IN009423" <pioush.kumar@oppo.com>
+Date: Mon, 27 Feb 2023 11:01:00 +0530
+Subject: [PATCH 38/72] Pause is getting scheduled 2 times
+
+Problem: {
+    1. open sony liv app.
+    2. Play any video.
+    3. Press home. Observe app is going to PIP
+    4. Now in logs we can see. am_pause_activity 2 times.
+    5. erforming pause of activity that is not resumed: {com.jio.jioplay.tv/com.jio.jioplay.tv.activities.HomeActivity}
+       02-21 23:47:01.705 18593 18593 E ActivityThread: java.lang.RuntimeException: Performing pause of activity that is not resumed: {com.jio.jioplay.tv/com.jio.jioplay.tv.activities.HomeActivity}
+       02-21 23:47:01.705 18593 18593 E ActivityThread: 	at android.app.ActivityThread.performPauseActivity(ActivityThread.java:5342)
+       02-21 23:47:01.705 18593 18593 E ActivityThread: 	at android.app.ActivityThread.handlePauseActivity(ActivityThread.java:5302)
+       02-21 23:47:01.705 18593 18593 E ActivityThread: 	at android.app.servertransaction.PauseActivityItem.execute(PauseActivityItem.java:53)
+}
+
+Solution: {
+    1. Need to define a variable to signify is pauseScheduled. If it is scheduled then do not schedule again for PIP.
+}
+
+Bug: 271360298
+
+Signed-off-by: pioush.kumar-IN009423 <pioush.kumar@oppo.com>
+Change-Id: I033acec4e290875652196506f3c998d9f8c68f7f
+Signed-off-by: pioush.kumar-IN009423 <pioush.kumar@oppo.com>
+---
+ services/core/java/com/android/server/wm/ActivityRecord.java    | 2 ++
+ .../java/com/android/server/wm/ActivityTaskManagerService.java  | 2 +-
+ services/core/java/com/android/server/wm/TaskFragment.java      | 2 ++
+ 3 files changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/services/core/java/com/android/server/wm/ActivityRecord.java b/services/core/java/com/android/server/wm/ActivityRecord.java
+index ac3fc92a..7c28dc51 100644
+--- a/services/core/java/com/android/server/wm/ActivityRecord.java
++++ b/services/core/java/com/android/server/wm/ActivityRecord.java
+@@ -566,6 +566,8 @@ final class ActivityRecord extends WindowToken implements WindowManagerService.A
+ 
+     Drawable mEnterpriseThumbnailDrawable;
+ 
++    boolean mPauseSchedulePendingForPip = false;
++
+     private void updateEnterpriseThumbnailDrawable(Context context) {
+         DevicePolicyManager dpm = context.getSystemService(DevicePolicyManager.class);
+         mEnterpriseThumbnailDrawable = dpm.getResources().getDrawable(
+diff --git a/services/core/java/com/android/server/wm/ActivityTaskManagerService.java b/services/core/java/com/android/server/wm/ActivityTaskManagerService.java
+index ca45e087..b8ad01d9 100644
+--- a/services/core/java/com/android/server/wm/ActivityTaskManagerService.java
++++ b/services/core/java/com/android/server/wm/ActivityTaskManagerService.java
+@@ -3582,7 +3582,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
+                         null /* launchIntoPipHostActivity */, "enterPictureInPictureMode",
+                         transition);
+                 // Continue the pausing process after entering pip.
+-                if (r.isState(PAUSING)) {
++                if (r.isState(PAUSING) && r.mPauseSchedulePendingForPip) {
+                     r.getTask().schedulePauseActivity(r, false /* userLeaving */,
+                             false /* pauseImmediately */, true /* autoEnteringPip */, "auto-pip");
+                 }
+diff --git a/services/core/java/com/android/server/wm/TaskFragment.java b/services/core/java/com/android/server/wm/TaskFragment.java
+index f428d3e2..dc3fe029 100644
+--- a/services/core/java/com/android/server/wm/TaskFragment.java
++++ b/services/core/java/com/android/server/wm/TaskFragment.java
+@@ -1656,6 +1656,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
+ 
+         if (prev.attachedToProcess()) {
+             if (shouldAutoPip) {
++                prev.mPauseSchedulePendingForPip = true;
+                 boolean didAutoPip = mAtmService.enterPictureInPictureMode(
+                         prev, prev.pictureInPictureArgs, false /* fromClient */);
+                 ProtoLog.d(WM_DEBUG_STATES, "Auto-PIP allowed, entering PIP mode "
+@@ -1719,6 +1720,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
+             boolean pauseImmediately, boolean autoEnteringPip, String reason) {
+         ProtoLog.v(WM_DEBUG_STATES, "Enqueueing pending pause: %s", prev);
+         try {
++            prev.mPauseSchedulePendingForPip = false;
+             EventLogTags.writeWmPauseActivity(prev.mUserId, System.identityHashCode(prev),
+                     prev.shortComponentName, "userLeaving=" + userLeaving, reason);
+ 
+-- 
+2.42.0
+

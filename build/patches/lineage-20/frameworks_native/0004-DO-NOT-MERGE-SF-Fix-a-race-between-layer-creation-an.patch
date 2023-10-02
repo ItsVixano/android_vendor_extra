@@ -1,0 +1,108 @@
+From 57278ff438560d5a8a56ec09589bd43b34080b9a Mon Sep 17 00:00:00 2001
+From: Vishnu Nair <vishnun@google.com>
+Date: Wed, 25 Jan 2023 17:49:13 +0000
+Subject: [PATCH 4/8] DO NOT MERGE: SF: Fix a race between layer creation and
+ apply transaction
+
+Between commitCreatedLayers and applyTransactions in the main
+thread, the client could create a new layer and queue a transaction.
+This will mean a layer transaction can be applied before the layer
+can be committed.
+
+Fix this by flushing the transactions to be applied before
+committing any new layers.
+
+Test: presubmit
+Fixes: b/262336014
+Change-Id: I9987614ade29456453de3610782a645ea9db0892
+---
+ services/surfaceflinger/SurfaceFlinger.cpp | 27 ++++++++++++++++++----
+ services/surfaceflinger/SurfaceFlinger.h   |  6 ++++-
+ 2 files changed, 28 insertions(+), 5 deletions(-)
+
+diff --git a/services/surfaceflinger/SurfaceFlinger.cpp b/services/surfaceflinger/SurfaceFlinger.cpp
+index 96b85d1d6f..a6d85d17ee 100644
+--- a/services/surfaceflinger/SurfaceFlinger.cpp
++++ b/services/surfaceflinger/SurfaceFlinger.cpp
+@@ -2139,8 +2139,16 @@ bool SurfaceFlinger::commit(nsecs_t frameTime, int64_t vsyncId, nsecs_t expected
+ 
+         bool needsTraversal = false;
+         if (clearTransactionFlags(eTransactionFlushNeeded)) {
++            // Locking:
++            // 1. to prevent onHandleDestroyed from being called while the state lock is held,
++            // we must keep a copy of the transactions (specifically the composer
++            // states) around outside the scope of the lock
++            // 2. Transactions and created layers do not share a lock. To prevent applying
++            // transactions with layers still in the createdLayer queue, flush the transactions
++            // before committing the created layers.
++            std::vector<TransactionState> transactions = flushTransactions();
+             needsTraversal |= commitCreatedLayers();
+-            needsTraversal |= flushTransactionQueues(vsyncId);
++            needsTraversal |= applyTransactions(transactions, vsyncId);
+         }
+ 
+         const bool shouldCommit =
+@@ -3822,7 +3830,7 @@ int SurfaceFlinger::flushPendingTransactionQueues(
+     return transactionsPendingBarrier;
+ }
+ 
+-bool SurfaceFlinger::flushTransactionQueues(int64_t vsyncId) {
++std::vector<TransactionState> SurfaceFlinger::flushTransactions() {
+     // to prevent onHandleDestroyed from being called while the lock is held,
+     // we must keep a copy of the transactions (specifically the composer
+     // states) around outside the scope of the lock
+@@ -3916,14 +3924,25 @@ bool SurfaceFlinger::flushTransactionQueues(int64_t vsyncId) {
+                 flushUnsignaledPendingTransactionQueues(transactions, bufferLayersReadyToPresent,
+                                                         applyTokensWithUnsignaledTransactions);
+             }
+-
+-            return applyTransactions(transactions, vsyncId);
+         }
+     }
++    return transactions;
++}
++
++// for test only
++bool SurfaceFlinger::flushTransactionQueues(int64_t vsyncId) {
++    std::vector<TransactionState> transactions = flushTransactions();
++    return applyTransactions(transactions, vsyncId);
+ }
+ 
+ bool SurfaceFlinger::applyTransactions(std::vector<TransactionState>& transactions,
+                                        int64_t vsyncId) {
++    Mutex::Autolock _l(mStateLock);
++    return applyTransactionsLocked(transactions, vsyncId);
++}
++
++bool SurfaceFlinger::applyTransactionsLocked(std::vector<TransactionState>& transactions,
++                                             int64_t vsyncId) {
+     bool needsTraversal = false;
+     // Now apply all transactions.
+     for (auto& transaction : transactions) {
+diff --git a/services/surfaceflinger/SurfaceFlinger.h b/services/surfaceflinger/SurfaceFlinger.h
+index 41ad635d54..856dbbe616 100644
+--- a/services/surfaceflinger/SurfaceFlinger.h
++++ b/services/surfaceflinger/SurfaceFlinger.h
+@@ -773,6 +773,9 @@ private:
+             REQUIRES(mStateLock);
+     // flush pending transaction that was presented after desiredPresentTime.
+     bool flushTransactionQueues(int64_t vsyncId);
++
++    std::vector<TransactionState> flushTransactions();
++
+     // Returns true if there is at least one transaction that needs to be flushed
+     bool transactionFlushNeeded();
+ 
+@@ -821,7 +824,8 @@ private:
+                                size_t totalTXapplied) const;
+     bool stopTransactionProcessing(const std::unordered_set<sp<IBinder>, SpHash<IBinder>>&
+                                            applyTokensWithUnsignaledTransactions) const;
+-    bool applyTransactions(std::vector<TransactionState>& transactions, int64_t vsyncId)
++    bool applyTransactions(std::vector<TransactionState>& transactions, int64_t vsyncId);
++    bool applyTransactionsLocked(std::vector<TransactionState>& transactions, int64_t vsyncId)
+             REQUIRES(mStateLock);
+     uint32_t setDisplayStateLocked(const DisplayState& s) REQUIRES(mStateLock);
+     uint32_t addInputWindowCommands(const InputWindowCommands& inputWindowCommands)
+-- 
+2.42.0
+

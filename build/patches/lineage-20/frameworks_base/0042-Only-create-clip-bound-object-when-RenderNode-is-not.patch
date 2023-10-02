@@ -1,0 +1,36 @@
+From ad35b186768e214b0521158018dfd64a5eb88e06 Mon Sep 17 00:00:00 2001
+From: Zhao Qin <qzmiss@gmail.com>
+Date: Fri, 14 Oct 2022 11:52:44 +0800
+Subject: [PATCH 42/72] Only create clip bound object when RenderNode is not
+ quick rejected
+
+These three objects are only used when we really draw the node, so
+don't create them if node has been quick rejected.
+
+Test: TBD
+Change-Id: Iae3f7a5d9c49aafd8ce3ede09b4093a2146d6568
+---
+ libs/hwui/pipeline/skia/RenderNodeDrawable.cpp | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/libs/hwui/pipeline/skia/RenderNodeDrawable.cpp b/libs/hwui/pipeline/skia/RenderNodeDrawable.cpp
+index 507d3dcd..9e17b9e6 100644
+--- a/libs/hwui/pipeline/skia/RenderNodeDrawable.cpp
++++ b/libs/hwui/pipeline/skia/RenderNodeDrawable.cpp
+@@ -224,10 +224,10 @@ void RenderNodeDrawable::drawContent(SkCanvas* canvas) const {
+     // TODO should we let the bound of the drawable do this for us?
+     const SkRect bounds = SkRect::MakeWH(properties.getWidth(), properties.getHeight());
+     bool quickRejected = properties.getClipToBounds() && canvas->quickReject(bounds);
+-    auto clipBounds = canvas->getLocalClipBounds();
+-    SkIRect srcBounds = SkIRect::MakeWH(bounds.width(), bounds.height());
+-    SkIPoint offset = SkIPoint::Make(0.0f, 0.0f);
+     if (!quickRejected) {
++        auto clipBounds = canvas->getLocalClipBounds();
++        SkIRect srcBounds = SkIRect::MakeWH(bounds.width(), bounds.height());
++        SkIPoint offset = SkIPoint::Make(0.0f, 0.0f);
+         SkiaDisplayList* displayList = renderNode->getDisplayList().asSkiaDl();
+         const LayerProperties& layerProperties = properties.layerProperties();
+         // composing a hardware layer
+-- 
+2.42.0
+

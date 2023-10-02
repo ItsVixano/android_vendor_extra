@@ -1,0 +1,46 @@
+From f43011356503f579acad486f9cd894e4a8daa4aa Mon Sep 17 00:00:00 2001
+From: Nicolas Geoffray <ngeoffray@google.com>
+Date: Tue, 19 Jul 2022 10:18:23 +0100
+Subject: [PATCH 04/30] Adjust thresholds for methods that share method hotness
+ counter.
+
+Those were initially set aggressively for memory, but benchmarks show we
+should adjust them.
+
+Test: health/microbench/systemui/systemui-latency-suite
+Bug: 235557326
+Change-Id: Iac1cadbbf4df5e2de4f8d3cf85a6e238c73e5b2e
+---
+ runtime/jit/jit.cc | 2 +-
+ runtime/thread.h   | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/runtime/jit/jit.cc b/runtime/jit/jit.cc
+index 6d634ae120..81d074d9d5 100644
+--- a/runtime/jit/jit.cc
++++ b/runtime/jit/jit.cc
+@@ -1764,7 +1764,7 @@ void Jit::MaybeEnqueueCompilation(ArtMethod* method, Thread* self) {
+     return;
+   }
+ 
+-  static constexpr size_t kIndividualSharedMethodHotnessThreshold = 0xff;
++  static constexpr size_t kIndividualSharedMethodHotnessThreshold = 0x3f;
+   if (method->IsMemorySharedMethod()) {
+     MutexLock mu(self, lock_);
+     auto it = shared_method_counters_.find(method);
+diff --git a/runtime/thread.h b/runtime/thread.h
+index dd8b061b95..6662169016 100644
+--- a/runtime/thread.h
++++ b/runtime/thread.h
+@@ -188,7 +188,7 @@ enum class WeakRefAccessState : int32_t {
+ // This should match RosAlloc::kNumThreadLocalSizeBrackets.
+ static constexpr size_t kNumRosAllocThreadLocalSizeBracketsInThread = 16;
+ 
+-static constexpr size_t kSharedMethodHotnessThreshold = 0xffff;
++static constexpr size_t kSharedMethodHotnessThreshold = 0x1fff;
+ 
+ // Thread's stack layout for implicit stack overflow checks:
+ //
+-- 
+2.42.0
+

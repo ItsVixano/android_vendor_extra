@@ -1,0 +1,41 @@
+From 5b0a5ded22c3745907e72da5faf5b99435e6c1bf Mon Sep 17 00:00:00 2001
+From: Jared Duke <jdduke@google.com>
+Date: Fri, 10 Jun 2022 16:19:05 -0700
+Subject: [PATCH 06/30] Only madvise for jank-perceptible processes
+
+The madvise optimization for ART artifacts was introduced to improve
+app startup performance. This optimization is less critical for
+background process startup, e.g., boot broadcast receivers. Suppress
+the madvise calls in these background (non-jank perceptible) cases,
+potentially reducing memory and IO pressure from background process
+activity.
+
+Bug: 235390330
+Test: m + presubmit + boot tests (check traces for madvise activity)
+Change-Id: Ib759e9f8ca84ecedd9a37d79970bc15c70116a3a
+---
+ runtime/runtime.cc | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/runtime/runtime.cc b/runtime/runtime.cc
+index e20f883446..149c8a9c17 100644
+--- a/runtime/runtime.cc
++++ b/runtime/runtime.cc
+@@ -3358,6 +3358,14 @@ void Runtime::MadviseFileForRange(size_t madvise_size_limit_bytes,
+                                   const uint8_t* map_begin,
+                                   const uint8_t* map_end,
+                                   const std::string& file_name) {
++  // Short-circuit the madvise optimization for background processes. This
++  // avoids IO and memory contention with foreground processes, particularly
++  // those involving app startup.
++  const Runtime* runtime = Runtime::Current();
++  if (runtime != nullptr && !runtime->InJankPerceptibleProcessState()) {
++    return;
++  }
++
+   // Ideal blockTransferSize for madvising files (128KiB)
+   static constexpr size_t kIdealIoTransferSizeBytes = 128*1024;
+ 
+-- 
+2.42.0
+

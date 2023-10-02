@@ -1,0 +1,655 @@
+From 108d1892c802c4feb9a689f74bc0f2ced02b71d0 Mon Sep 17 00:00:00 2001
+From: Santiago Aboy Solanes <solanes@google.com>
+Date: Tue, 24 Jan 2023 18:05:10 +0000
+Subject: [PATCH 25/30] Add phis in SimplifyIfs to enable branch redirection
+
+For example it turns:
+if(cond)
+  /  \
+ B1  B2
+  \ /
+if(cond)
+  /  \
+ B3  B4
+
+into:
+if(cond)
+  /  \
+ B1  B2
+  \ /
+if(Phi(1, 0))
+  /  \
+ B3  B4
+
+Following this, SimplifyIfs is able to connect B1->B3
+and B2->B4 effectively skipping an if.
+
+Locally, speed compiling on a Pixel 5:
+ * system server: -4.0KB (-0.01%)
+ * SystemUIGoogle: -8.0KB (-0.03%)
+ * AGSA: -17.75KB (-0.01%)
+
+Test: art/test/testrunner/testrunner.py --host --64 --optimizing -b
+Change-Id: I3b2e6a986b4d5e162bec28d72e9b0e2a3de1a4c3
+---
+ compiler/optimizing/dead_code_elimination.cc  | 195 +++++++++---
+ compiler/optimizing/dead_code_elimination.h   |  47 +++
+ .../optimizing/optimizing_compiler_stats.h    |   1 +
+ .../expected-stderr.txt                       |   0
+ .../expected-stdout.txt                       |   0
+ test/2255-checker-branch-redirection/info.txt |   2 +
+ .../src/Main.java                             | 282 ++++++++++++++++++
+ 7 files changed, 484 insertions(+), 43 deletions(-)
+ create mode 100644 test/2255-checker-branch-redirection/expected-stderr.txt
+ create mode 100644 test/2255-checker-branch-redirection/expected-stdout.txt
+ create mode 100644 test/2255-checker-branch-redirection/info.txt
+ create mode 100644 test/2255-checker-branch-redirection/src/Main.java
+
+diff --git a/compiler/optimizing/dead_code_elimination.cc b/compiler/optimizing/dead_code_elimination.cc
+index 8e5f3783b8..c814b83938 100644
+--- a/compiler/optimizing/dead_code_elimination.cc
++++ b/compiler/optimizing/dead_code_elimination.cc
+@@ -303,54 +303,45 @@ bool HDeadCodeElimination::SimplifyAlwaysThrows() {
+   return false;
+ }
+ 
+-// Simplify the pattern:
+-//
+-//        B1    B2    ...
+-//       goto  goto  goto
+-//         \    |    /
+-//          \   |   /
+-//             B3
+-//     i1 = phi(input, input)
+-//     (i2 = condition on i1)
+-//        if i1 (or i2)
+-//          /     \
+-//         /       \
+-//        B4       B5
+-//
+-// Into:
+-//
+-//       B1      B2    ...
+-//        |      |      |
+-//       B4      B5    B?
+-//
+-// Note that individual edges can be redirected (for example B2->B3
+-// can be redirected as B2->B5) without applying this optimization
+-// to other incoming edges.
+-//
+-// This simplification cannot be applied to catch blocks, because
+-// exception handler edges do not represent normal control flow.
+-// Though in theory this could still apply to normal control flow
+-// going directly to a catch block, we cannot support it at the
+-// moment because the catch Phi's inputs do not correspond to the
+-// catch block's predecessors, so we cannot identify which
+-// predecessor corresponds to a given statically evaluated input.
+-//
+-// We do not apply this optimization to loop headers as this could
+-// create irreducible loops. We rely on the suspend check in the
+-// loop header to prevent the pattern match.
+-//
+-// Note that we rely on the dead code elimination to get rid of B3.
+ bool HDeadCodeElimination::SimplifyIfs() {
+   bool simplified_one_or_more_ifs = false;
+   bool rerun_dominance_and_loop_analysis = false;
+ 
+-  for (HBasicBlock* block : graph_->GetReversePostOrder()) {
++  // Iterating in PostOrder it's better for MaybeAddPhi as it can add a Phi for multiple If
++  // instructions in a chain without updating the dominator chain. The branch redirection itself can
++  // work in PostOrder or ReversePostOrder without issues.
++  for (HBasicBlock* block : graph_->GetPostOrder()) {
++    if (block->IsCatchBlock()) {
++      // This simplification cannot be applied to catch blocks, because exception handler edges do
++      // not represent normal control flow. Though in theory this could still apply to normal
++      // control flow going directly to a catch block, we cannot support it at the moment because
++      // the catch Phi's inputs do not correspond to the catch block's predecessors, so we cannot
++      // identify which predecessor corresponds to a given statically evaluated input.
++      continue;
++    }
++
+     HInstruction* last = block->GetLastInstruction();
+-    HInstruction* first = block->GetFirstInstruction();
+-    if (!block->IsCatchBlock() &&
+-        last->IsIf() &&
+-        block->HasSinglePhi() &&
++    if (!last->IsIf()) {
++      continue;
++    }
++
++    if (block->IsLoopHeader()) {
++      // We do not apply this optimization to loop headers as this could create irreducible loops.
++      continue;
++    }
++
++    // We will add a Phi which allows the simplification to take place in cases where it wouldn't.
++    MaybeAddPhi(block);
++
++    // TODO(solanes): Investigate support for multiple phis in `block`. We can potentially "push
++    // downwards" existing Phis into the true/false branches. For example, let's say we have another
++    // Phi: Phi(x1,x2,x3,x4,x5,x6). This could turn into Phi(x1,x2) in the true branch, Phi(x3,x4)
++    // in the false branch, and remain as Phi(x5,x6) in `block` (for edges that we couldn't
++    // redirect). We might even be able to remove some phis altogether as they will have only one
++    // value.
++    if (block->HasSinglePhi() &&
+         block->GetFirstPhi()->HasOnlyOneNonEnvironmentUse()) {
++      HInstruction* first = block->GetFirstInstruction();
+       bool has_only_phi_and_if = (last == first) && (last->InputAt(0) == block->GetFirstPhi());
+       bool has_only_phi_condition_and_if =
+           !has_only_phi_and_if &&
+@@ -361,7 +352,6 @@ bool HDeadCodeElimination::SimplifyIfs() {
+           first->HasOnlyOneNonEnvironmentUse();
+ 
+       if (has_only_phi_and_if || has_only_phi_condition_and_if) {
+-        DCHECK(!block->IsLoopHeader());
+         HPhi* phi = block->GetFirstPhi()->AsPhi();
+         bool phi_input_is_left = (first->InputAt(0) == phi);
+ 
+@@ -446,6 +436,125 @@ bool HDeadCodeElimination::SimplifyIfs() {
+   return simplified_one_or_more_ifs;
+ }
+ 
++void HDeadCodeElimination::MaybeAddPhi(HBasicBlock* block) {
++  DCHECK(block->GetLastInstruction()->IsIf());
++  HIf* if_instruction = block->GetLastInstruction()->AsIf();
++  if (if_instruction->InputAt(0)->IsConstant()) {
++    // Constant values are handled in RemoveDeadBlocks.
++    return;
++  }
++
++  if (block->GetNumberOfPredecessors() < 2u) {
++    // Nothing to redirect.
++    return;
++  }
++
++  if (!block->GetPhis().IsEmpty()) {
++    // SimplifyIf doesn't currently work with multiple phis. Adding a phi here won't help that
++    // optimization.
++    return;
++  }
++
++  HBasicBlock* dominator = block->GetDominator();
++  if (!dominator->EndsWithIf()) {
++    return;
++  }
++
++  HInstruction* input = if_instruction->InputAt(0);
++  HInstruction* dominator_input = dominator->GetLastInstruction()->AsIf()->InputAt(0);
++  const bool same_input = dominator_input == input;
++  if (!same_input) {
++    // Try to see if the dominator has the opposite input (e.g. if(cond) and if(!cond)). If that's
++    // the case, we can perform the optimization with the false and true branches reversed.
++    if (!dominator_input->IsCondition() || !input->IsCondition()) {
++      return;
++    }
++
++    HCondition* block_cond = input->AsCondition();
++    HCondition* dominator_cond = dominator_input->AsCondition();
++
++    if (block_cond->GetLeft() != dominator_cond->GetLeft() ||
++        block_cond->GetRight() != dominator_cond->GetRight() ||
++        block_cond->GetOppositeCondition() != dominator_cond->GetCondition()) {
++      return;
++    }
++  }
++
++  if (kIsDebugBuild) {
++    // `block`'s successors should have only one predecessor. Otherwise, we have a critical edge in
++    // the graph.
++    for (HBasicBlock* succ : block->GetSuccessors()) {
++      DCHECK_EQ(succ->GetNumberOfPredecessors(), 1u);
++    }
++  }
++
++  const size_t pred_size = block->GetNumberOfPredecessors();
++  HPhi* new_phi = new (graph_->GetAllocator())
++      HPhi(graph_->GetAllocator(), kNoRegNumber, pred_size, DataType::Type::kInt32);
++
++  for (size_t index = 0; index < pred_size; index++) {
++    HBasicBlock* pred = block->GetPredecessors()[index];
++    const bool dominated_by_true =
++        dominator->GetLastInstruction()->AsIf()->IfTrueSuccessor()->Dominates(pred);
++    const bool dominated_by_false =
++        dominator->GetLastInstruction()->AsIf()->IfFalseSuccessor()->Dominates(pred);
++    if (dominated_by_true == dominated_by_false) {
++      // In this case, we can't know if we are coming from the true branch, or the false branch. It
++      // happens in cases like:
++      //      1 (outer if)
++      //     / \
++      //    2   3 (inner if)
++      //    |  / \
++      //    | 4  5
++      //     \/  |
++      //      6  |
++      //       \ |
++      //         7 (has the same if(cond) as 1)
++      //         |
++      //         8
++      // `7` (which would be `block` in this example), and `6` will come from both the true path and
++      // the false path of `1`. We bumped into something similar in SelectGenerator. See
++      // HSelectGenerator::TryFixupDoubleDiamondPattern.
++      // TODO(solanes): Figure out if we can fix up the graph into a double diamond in a generic way
++      // so that DeadCodeElimination and SelectGenerator can take advantage of it.
++
++      if (!same_input) {
++        // `1` and `7` having the opposite condition is a case we are missing. We could potentially
++        // add a BooleanNot instruction to be able to add the Phi, but it seems like overkill since
++        // this case is not that common.
++        return;
++      }
++
++      // The Phi will have `0`, `1`, and `cond` as inputs. If SimplifyIf redirects 0s and 1s, we
++      // will end up with Phi(cond,...,cond) which will be replaced by `cond`. Effectively, we will
++      // redirect edges that we are able to redirect and the rest will remain as before (i.e. we
++      // won't have an extra Phi).
++      new_phi->SetRawInputAt(index, input);
++    } else {
++      // Redirect to either the true branch (1), or the false branch (0).
++      // Given that `dominated_by_true` is the exact opposite of `dominated_by_false`,
++      // `(same_input && dominated_by_true) || (!same_input && dominated_by_false)` is equivalent to
++      // `same_input == dominated_by_true`.
++      new_phi->SetRawInputAt(
++          index,
++          same_input == dominated_by_true ? graph_->GetIntConstant(1) : graph_->GetIntConstant(0));
++    }
++  }
++
++  block->AddPhi(new_phi);
++  if_instruction->ReplaceInput(new_phi, 0);
++
++  // Remove the old input now, if possible. This allows the branch redirection in SimplifyIf to
++  // work without waiting for another pass of DCE.
++  if (input->IsDeadAndRemovable()) {
++    DCHECK(!same_input)
++        << " if both blocks have the same condition, it shouldn't be dead and removable since the "
++        << "dominator block's If instruction would be using that condition.";
++    input->GetBlock()->RemoveInstruction(input);
++  }
++  MaybeRecordStat(stats_, MethodCompilationStat::kSimplifyIfAddedPhi);
++}
++
+ void HDeadCodeElimination::ConnectSuccessiveBlocks() {
+   // Order does not matter. Skip the entry block by starting at index 1 in reverse post order.
+   for (size_t i = 1u, size = graph_->GetReversePostOrder().size(); i != size; ++i) {
+diff --git a/compiler/optimizing/dead_code_elimination.h b/compiler/optimizing/dead_code_elimination.h
+index 26deb8cf7d..84195c586e 100644
+--- a/compiler/optimizing/dead_code_elimination.h
++++ b/compiler/optimizing/dead_code_elimination.h
+@@ -42,6 +42,31 @@ class HDeadCodeElimination : public HOptimization {
+   bool RemoveDeadBlocks();
+   void RemoveDeadInstructions();
+   bool SimplifyAlwaysThrows();
++  // Simplify the pattern:
++  //
++  //        B1    B2    ...
++  //       goto  goto  goto
++  //         \    |    /
++  //          \   |   /
++  //             B3
++  //     i1 = phi(input, input)
++  //     (i2 = condition on i1)
++  //        if i1 (or i2)
++  //          /     \
++  //         /       \
++  //        B4       B5
++  //
++  // Into:
++  //
++  //       B1      B2    ...
++  //        |      |      |
++  //       B4      B5    B?
++  //
++  // Note that individual edges can be redirected (for example B2->B3
++  // can be redirected as B2->B5) without applying this optimization
++  // to other incoming edges.
++  //
++  // Note that we rely on the dead code elimination to get rid of B3.
+   bool SimplifyIfs();
+   void ConnectSuccessiveBlocks();
+ 
+@@ -65,6 +90,28 @@ class HDeadCodeElimination : public HOptimization {
+   // instructions.
+   bool RemoveUnneededTries();
+ 
++  // Adds a phi in `block`, if `block` and its dominator have the same (or opposite) condition.
++  // For example it turns:
++  // if(cond)
++  //   /  \
++  //  B1  B2
++  //   \ /
++  // if(cond)
++  //   /  \
++  //  B3  B4
++  //
++  // into:
++  // if(cond)
++  //   /  \
++  //  B1  B2
++  //   \ /
++  // if(Phi(1, 0))
++  //   /  \
++  //  B3  B4
++  //
++  // Following this, SimplifyIfs is able to connect B1->B3 and B2->B4 effectively skipping an if.
++  void MaybeAddPhi(HBasicBlock* block);
++
+   DISALLOW_COPY_AND_ASSIGN(HDeadCodeElimination);
+ };
+ 
+diff --git a/compiler/optimizing/optimizing_compiler_stats.h b/compiler/optimizing/optimizing_compiler_stats.h
+index c770a21b3a..c5ed0593da 100644
+--- a/compiler/optimizing/optimizing_compiler_stats.h
++++ b/compiler/optimizing/optimizing_compiler_stats.h
+@@ -79,6 +79,7 @@ enum class MethodCompilationStat {
+   kImplicitNullCheckGenerated,
+   kExplicitNullCheckGenerated,
+   kSimplifyIf,
++  kSimplifyIfAddedPhi,
+   kSimplifyThrowingInvoke,
+   kInstructionSunk,
+   kNotInlinedUnresolvedEntrypoint,
+diff --git a/test/2255-checker-branch-redirection/expected-stderr.txt b/test/2255-checker-branch-redirection/expected-stderr.txt
+new file mode 100644
+index 0000000000..e69de29bb2
+diff --git a/test/2255-checker-branch-redirection/expected-stdout.txt b/test/2255-checker-branch-redirection/expected-stdout.txt
+new file mode 100644
+index 0000000000..e69de29bb2
+diff --git a/test/2255-checker-branch-redirection/info.txt b/test/2255-checker-branch-redirection/info.txt
+new file mode 100644
+index 0000000000..10b71ef0a7
+--- /dev/null
++++ b/test/2255-checker-branch-redirection/info.txt
+@@ -0,0 +1,2 @@
++Tests that we can redirect branches if the block and its dominator
++have the same condition, or the exact opposite condition.
+diff --git a/test/2255-checker-branch-redirection/src/Main.java b/test/2255-checker-branch-redirection/src/Main.java
+new file mode 100644
+index 0000000000..bfc6381942
+--- /dev/null
++++ b/test/2255-checker-branch-redirection/src/Main.java
+@@ -0,0 +1,282 @@
++/*
++ * Copyright (C) 2023 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++public class Main {
++    public static void main(String[] args) throws Exception {
++        assertEquals(40, $noinline$testEliminateIf(20, 40));
++        assertEquals(30, $noinline$testEliminateIf(20, 10));
++        assertEquals(40, $noinline$testEliminateIfTwiceInARow(20, 40));
++        assertEquals(30, $noinline$testEliminateIfTwiceInARow(20, 10));
++        assertEquals(40, $noinline$testEliminateIfThreePredecessors(20, 40));
++        assertEquals(30, $noinline$testEliminateIfThreePredecessors(20, 10));
++        assertEquals(40, $noinline$testEliminateIfOppositeCondition(20, 40));
++        assertEquals(30, $noinline$testEliminateIfOppositeCondition(20, 10));
++        assertEquals(40, $noinline$testEliminateIfParameter(20, 40, 20 < 40));
++        assertEquals(30, $noinline$testEliminateIfParameter(20, 10, 20 < 10));
++        assertEquals(40, $noinline$testEliminateIfParameterReverseCondition(20, 40, 20 < 40));
++        assertEquals(30, $noinline$testEliminateIfParameterReverseCondition(20, 10, 20 < 10));
++        assertEquals(40, $noinline$testEliminateIfParameterOppositeCondition(20, 40, 20 < 40));
++        assertEquals(30, $noinline$testEliminateIfParameterOppositeCondition(20, 10, 20 < 10));
++        assertEquals(40, $noinline$testEliminateIfParameterOppositeCondition_2(20, 40, 20 < 40));
++        assertEquals(30, $noinline$testEliminateIfParameterOppositeCondition_2(20, 10, 20 < 10));
++    }
++
++    private static int $noinline$emptyMethod(int a) {
++        return a;
++    }
++
++    /// CHECK-START: int Main.$noinline$testEliminateIf(int, int) dead_code_elimination$after_gvn (before)
++    /// CHECK:     If
++    /// CHECK:     If
++
++    /// CHECK-START: int Main.$noinline$testEliminateIf(int, int) dead_code_elimination$after_gvn (after)
++    /// CHECK:     If
++    /// CHECK-NOT: If
++    private static int $noinline$testEliminateIf(int a, int b) {
++        int result = 0;
++        if (a < b) {
++            $noinline$emptyMethod(a + b);
++        } else {
++            $noinline$emptyMethod(a - b);
++        }
++        if (a < b) {
++            result += $noinline$emptyMethod(a * 2);
++        } else {
++            result += $noinline$emptyMethod(b * 3);
++        }
++        return result;
++    }
++
++    /// CHECK-START: int Main.$noinline$testEliminateIfTwiceInARow(int, int) dead_code_elimination$after_gvn (before)
++    /// CHECK:     If
++    /// CHECK:     If
++    /// CHECK:     If
++
++    /// CHECK-START: int Main.$noinline$testEliminateIfTwiceInARow(int, int) dead_code_elimination$after_gvn (after)
++    /// CHECK:     If
++    /// CHECK-NOT: If
++    private static int $noinline$testEliminateIfTwiceInARow(int a, int b) {
++        int result = 0;
++        if (a < b) {
++            $noinline$emptyMethod(a + b);
++        } else {
++            $noinline$emptyMethod(a - b);
++        }
++        if (a < b) {
++            $noinline$emptyMethod(a * 2);
++        } else {
++            $noinline$emptyMethod(b * 3);
++        }
++        if (a < b) {
++            result += $noinline$emptyMethod(40);
++        } else {
++            result += $noinline$emptyMethod(30);
++        }
++        return result;
++    }
++
++    /// CHECK-START: int Main.$noinline$testEliminateIfThreePredecessors(int, int) dead_code_elimination$after_gvn (before)
++    /// CHECK:     If
++    /// CHECK:     If
++    /// CHECK:     If
++
++    /// CHECK-START: int Main.$noinline$testEliminateIfThreePredecessors(int, int) dead_code_elimination$after_gvn (after)
++    /// CHECK:     If
++    /// CHECK:     If
++    /// CHECK-NOT: If
++    private static int $noinline$testEliminateIfThreePredecessors(int a, int b) {
++        int result = 0;
++        if (a < b) {
++            $noinline$emptyMethod(a + b);
++        } else {
++            if (b < 5) {
++                $noinline$emptyMethod(a - b);
++            } else {
++                $noinline$emptyMethod(a * b);
++            }
++        }
++        if (a < b) {
++            result += $noinline$emptyMethod(a * 2);
++        } else {
++            result += $noinline$emptyMethod(b * 3);
++        }
++        return result;
++    }
++
++    // Note that we can perform this optimization in dead_code_elimination$initial since we don't
++    // rely on gvn to de-duplicate the values.
++
++    /// CHECK-START: int Main.$noinline$testEliminateIfOppositeCondition(int, int) dead_code_elimination$initial (before)
++    /// CHECK:     If
++    /// CHECK:     If
++
++    /// CHECK-START: int Main.$noinline$testEliminateIfOppositeCondition(int, int) dead_code_elimination$initial (after)
++    /// CHECK:     If
++    /// CHECK-NOT: If
++    private static int $noinline$testEliminateIfOppositeCondition(int a, int b) {
++        int result = 0;
++        if (a < b) {
++            $noinline$emptyMethod(a + b);
++        } else {
++            $noinline$emptyMethod(a - b);
++        }
++        if (a >= b) {
++            result += $noinline$emptyMethod(b * 3);
++        } else {
++            result += $noinline$emptyMethod(a * 2);
++        }
++        return result;
++    }
++
++    // In this scenario, we have a BooleanNot before the If instructions so we have to wait until
++    // the following pass to perform the optimization. The BooleanNot is dead at this time (even
++    // when starting DCE), but RemoveDeadInstructions runs after SimplifyIfs so the optimization
++    // doesn't trigger.
++
++    /// CHECK-START: int Main.$noinline$testEliminateIfParameter(int, int, boolean) dead_code_elimination$initial (before)
++    /// CHECK:     BooleanNot
++    /// CHECK:     If
++    /// CHECK:     BooleanNot
++    /// CHECK:     If
++
++    /// CHECK-START: int Main.$noinline$testEliminateIfParameter(int, int, boolean) dead_code_elimination$initial (after)
++    /// CHECK:     If
++    /// CHECK:     Phi
++    /// CHECK:     If
++
++    /// CHECK-START: int Main.$noinline$testEliminateIfParameter(int, int, boolean) dead_code_elimination$initial (after)
++    /// CHECK-NOT: BooleanNot
++
++    /// CHECK-START: int Main.$noinline$testEliminateIfParameter(int, int, boolean) dead_code_elimination$after_gvn (before)
++    /// CHECK:     If
++    /// CHECK:     Phi
++    /// CHECK:     If
++
++    /// CHECK-START: int Main.$noinline$testEliminateIfParameter(int, int, boolean) dead_code_elimination$after_gvn (after)
++    /// CHECK:     If
++    /// CHECK-NOT: If
++    private static int $noinline$testEliminateIfParameter(int a, int b, boolean condition) {
++        int result = 0;
++        if (condition) {
++            $noinline$emptyMethod(a + b);
++        } else {
++            $noinline$emptyMethod(a - b);
++        }
++        if (condition) {
++            result += $noinline$emptyMethod(a * 2);
++        } else {
++            result += $noinline$emptyMethod(b * 3);
++        }
++        return result;
++    }
++
++    // Same in the following two cases: we do it in dead_code_elimination$initial since GVN is not
++    // needed.
++
++    /// CHECK-START: int Main.$noinline$testEliminateIfParameterReverseCondition(int, int, boolean) dead_code_elimination$initial (before)
++    /// CHECK:     If
++    /// CHECK:     If
++
++    /// CHECK-START: int Main.$noinline$testEliminateIfParameterReverseCondition(int, int, boolean) dead_code_elimination$initial (after)
++    /// CHECK:     If
++    /// CHECK-NOT: If
++    private static int $noinline$testEliminateIfParameterReverseCondition(
++            int a, int b, boolean condition) {
++        int result = 0;
++        if (!condition) {
++            $noinline$emptyMethod(a + b);
++        } else {
++            $noinline$emptyMethod(a - b);
++        }
++        if (!condition) {
++            result += $noinline$emptyMethod(b * 3);
++        } else {
++            result += $noinline$emptyMethod(a * 2);
++        }
++        return result;
++    }
++
++    /// CHECK-START: int Main.$noinline$testEliminateIfParameterOppositeCondition(int, int, boolean) dead_code_elimination$initial (before)
++    /// CHECK:     If
++    /// CHECK:     If
++
++    /// CHECK-START: int Main.$noinline$testEliminateIfParameterOppositeCondition(int, int, boolean) dead_code_elimination$initial (after)
++    /// CHECK:     If
++    /// CHECK-NOT: If
++    private static int $noinline$testEliminateIfParameterOppositeCondition(
++            int a, int b, boolean condition) {
++        int result = 0;
++        if (condition) {
++            $noinline$emptyMethod(a + b);
++        } else {
++            $noinline$emptyMethod(a - b);
++        }
++        if (!condition) {
++            result += $noinline$emptyMethod(b * 3);
++        } else {
++            result += $noinline$emptyMethod(a * 2);
++        }
++        return result;
++    }
++
++    // In this scenario, we have a BooleanNot before the If instructions so we have to wait until
++    // the following pass to perform the optimization. The BooleanNot is dead at this time (even
++    // when starting DCE), but RemoveDeadInstructions runs after SimplifyIfs so the optimization
++    // doesn't trigger.
++
++    /// CHECK-START: int Main.$noinline$testEliminateIfParameterOppositeCondition_2(int, int, boolean) dead_code_elimination$initial (before)
++    /// CHECK:     If
++    /// CHECK:     BooleanNot
++    /// CHECK:     If
++
++    /// CHECK-START: int Main.$noinline$testEliminateIfParameterOppositeCondition_2(int, int, boolean) dead_code_elimination$initial (after)
++    /// CHECK:     If
++    /// CHECK:     Phi
++    /// CHECK:     If
++
++    /// CHECK-START: int Main.$noinline$testEliminateIfParameterOppositeCondition_2(int, int, boolean) dead_code_elimination$initial (after)
++    /// CHECK-NOT: BooleanNot
++
++    /// CHECK-START: int Main.$noinline$testEliminateIfParameterOppositeCondition_2(int, int, boolean) dead_code_elimination$after_gvn (before)
++    /// CHECK:     If
++    /// CHECK:     Phi
++    /// CHECK:     If
++
++    /// CHECK-START: int Main.$noinline$testEliminateIfParameterOppositeCondition_2(int, int, boolean) dead_code_elimination$after_gvn (after)
++    /// CHECK:     If
++    /// CHECK-NOT: If
++    private static int $noinline$testEliminateIfParameterOppositeCondition_2(
++            int a, int b, boolean condition) {
++        int result = 0;
++        if (!condition) {
++            $noinline$emptyMethod(a + b);
++        } else {
++            $noinline$emptyMethod(a - b);
++        }
++        if (condition) {
++            result += $noinline$emptyMethod(a * 2);
++        } else {
++            result += $noinline$emptyMethod(b * 3);
++        }
++        return result;
++    }
++
++    public static void assertEquals(int expected, int result) {
++        if (expected != result) {
++            throw new Error("Expected: " + expected + ", found: " + result);
++        }
++    }
++}
+-- 
+2.42.0
+

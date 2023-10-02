@@ -1,0 +1,72 @@
+From 931c76e7a9a636cb47cf40305c9c3a753b854a94 Mon Sep 17 00:00:00 2001
+From: qinyige1 <qinyige1@xiaomi.com>
+Date: Wed, 22 Feb 2023 11:02:53 +0800
+Subject: [PATCH 47/72] Catch exception when dump local window.
+
+The local window may update its view on its ui thread.
+Add synchronization in case the window is removing when dumping.
+Also catch exception for the race condition inside the view.
+
+Bug: 270280397
+Test: Manual
+Change-Id: Ic0268ffff9a6a087b9e18340783da0676bf9caee
+---
+ .../server/wm/WindowManagerShellCommand.java  | 28 ++++++++++++-------
+ 1 file changed, 18 insertions(+), 10 deletions(-)
+
+diff --git a/services/core/java/com/android/server/wm/WindowManagerShellCommand.java b/services/core/java/com/android/server/wm/WindowManagerShellCommand.java
+index 5b453fe1..966ac63f 100644
+--- a/services/core/java/com/android/server/wm/WindowManagerShellCommand.java
++++ b/services/core/java/com/android/server/wm/WindowManagerShellCommand.java
+@@ -42,6 +42,7 @@ import android.provider.Settings;
+ import android.util.DisplayMetrics;
+ import android.util.Pair;
+ import android.view.Display;
++import android.view.IWindow;
+ import android.view.IWindowManager;
+ import android.view.ViewDebug;
+ 
+@@ -554,6 +555,22 @@ public class WindowManagerShellCommand extends ShellCommand {
+         return 0;
+     }
+ 
++    private void dumpLocalWindowAsync(IWindow client, ParcelFileDescriptor pfd) {
++        // Make it asynchronous to avoid writer from being blocked
++        // by waiting for the buffer to be consumed in the same process.
++        IoThread.getExecutor().execute(() -> {
++            synchronized (mInternal.mGlobalLock) {
++                try {
++                    client.executeCommand(ViewDebug.REMOTE_COMMAND_DUMP_ENCODED, null, pfd);
++                } catch (Exception e) {
++                    // Ignore RemoteException for local call. Just print trace for other
++                    // exceptions caused by RC with tolerable low possibility.
++                    e.printStackTrace();
++                }
++            }
++        });
++    }
++
+     private int runDumpVisibleWindowViews(PrintWriter pw) {
+         if (!mInternal.checkCallingPermission(android.Manifest.permission.DUMP,
+                 "runDumpVisibleWindowViews()")) {
+@@ -576,16 +593,7 @@ public class WindowManagerShellCommand extends ShellCommand {
+                             pipe = new ByteTransferPipe();
+                             final ParcelFileDescriptor pfd = pipe.getWriteFd();
+                             if (w.isClientLocal()) {
+-                                // Make it asynchronous to avoid writer from being blocked
+-                                // by waiting for the buffer to be consumed in the same process.
+-                                IoThread.getExecutor().execute(() -> {
+-                                    try {
+-                                        w.mClient.executeCommand(
+-                                                ViewDebug.REMOTE_COMMAND_DUMP_ENCODED, null, pfd);
+-                                    } catch (RemoteException e) {
+-                                        // Ignore for local call.
+-                                    }
+-                                });
++                                dumpLocalWindowAsync(w.mClient, pfd);
+                             } else {
+                                 w.mClient.executeCommand(
+                                         ViewDebug.REMOTE_COMMAND_DUMP_ENCODED, null, pfd);
+-- 
+2.42.0
+

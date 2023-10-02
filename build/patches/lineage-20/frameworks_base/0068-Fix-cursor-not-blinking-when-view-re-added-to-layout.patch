@@ -1,0 +1,81 @@
+From f9ccbad9a0909cd405a0c696b62c7349fafd5557 Mon Sep 17 00:00:00 2001
+From: Steven Terrell <steventerrell@google.com>
+Date: Thu, 20 Apr 2023 02:46:08 +0000
+Subject: [PATCH 68/72] Fix cursor not blinking when view re-added to layout
+
+This fixes a bug where if the EditText view has or had focus and then
+is removed from the layout and re-added the cursor does not resume
+blinking.
+
+There was a change several months ago that prevented the cursor from
+blinking when the window is no longer visible.  That change added a
+check in shouldBlink to verify that the window is visible.  This
+created a situation where the window might not be visible when
+makeBlink is called from onFocusChanged and as a result mBlink is
+never instantiated. This resulted in the cursor not blinking after an
+app starts. The fix was to call makeBlink again when onAttachToWindow
+is called.  The Window is visible at this point and the cursor blinks
+as expected.
+
+The reason the code change below is needed is in the case where a view
+is removed and added back after the mBlink object has been
+instantiated. A call to unCancel is needed to ensure that the cursor
+resumes blinking as expected. This was identified in this change
+aosp/2540031.
+
+The change also guards against the window not visible case as outlined
+above.
+
+Bug: 278907680
+Test: Added following CTS test:
+      testCursorResumeBlinking_AfterFocusedView_DynamicallyRemovedAdded
+      testCursorBlinking_ViewDynamically_RemovedAdded_NeverHadFocus
+      testCursorSuspendBlinking_ViewDynamicallyRemoved
+      testCursorNotBlinking_ViewDynamicallyAdded_NoFocus
+      testCursorBlinking_ViewDynamicallyAdded_WithFocus
+Change-Id: I07afc7ef1a707549240479015a00a66db814afb7
+---
+ core/java/android/widget/Editor.java | 12 ++++++++++--
+ 1 file changed, 10 insertions(+), 2 deletions(-)
+
+diff --git a/core/java/android/widget/Editor.java b/core/java/android/widget/Editor.java
+index 81c0b9ea..712c5457 100644
+--- a/core/java/android/widget/Editor.java
++++ b/core/java/android/widget/Editor.java
+@@ -709,7 +709,10 @@ public class Editor {
+         }
+ 
+         getPositionListener().addSubscriber(mCursorAnchorInfoNotifier, true);
+-        makeBlink();
++        // Call resumeBlink here instead of makeBlink to ensure that if mBlink is not null the
++        // Blink object is uncancelled.  This ensures when a view is removed and added back the
++        // cursor will resume blinking.
++        resumeBlink();
+     }
+ 
+     void onDetachedFromWindow() {
+@@ -1081,8 +1084,10 @@ public class Editor {
+     private void resumeBlink() {
+         if (mBlink != null) {
+             mBlink.uncancel();
+-            makeBlink();
+         }
++        // Moving makeBlink outside of the null check block ensures that mBlink object gets
++        // instantiated when the view is added to the window if mBlink is still null.
++        makeBlink();
+     }
+ 
+     void adjustInputType(boolean password, boolean passwordInputType,
+@@ -2862,6 +2867,9 @@ public class Editor {
+         if (shouldBlink()) {
+             mShowCursor = SystemClock.uptimeMillis();
+             if (mBlink == null) mBlink = new Blink();
++            // Call uncancel as mBlink could have previously been cancelled and cursor will not
++            // resume blinking unless uncancelled.
++            mBlink.uncancel();
+             mTextView.removeCallbacks(mBlink);
+             mTextView.postDelayed(mBlink, BLINK);
+         } else {
+-- 
+2.42.0
+

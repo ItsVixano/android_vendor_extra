@@ -1,0 +1,275 @@
+From ab3de467b46deabca0ae3c2e8eaed2e6a33ab80b Mon Sep 17 00:00:00 2001
+From: Santiago Aboy Solanes <solanes@google.com>
+Date: Mon, 31 Oct 2022 11:27:24 +0000
+Subject: [PATCH 14/30] Don't inline methods whose basic blocks end with a
+ throw
+
+If the basic block will end up throwing, it is commonly not in the
+critical path. If we throw, we incur in a performance cost anyway
+so we can skip inlining those methods. Additionally, methods
+before a throw are sometimes construct information which is
+something we are not interested in inlining.
+
+Note that this CL doesn't stop inlining for methods that eventually
+always end with a throw. See the 2243- test for an example
+(testEndsWithThrowButNotDirectly). We could perform a more detailed
+analysis but that analysis will increase compile time so it is left
+as a further optimization if needed.
+
+Locally in a Pixel 5 with AOSP, code size improved:
+ * AGSA: 15.3 MB (~4.6%)
+ * System Server: 1.9 MB (~3.74%)
+ * SysemUIGoogle: 0.88MB (~3.05%)
+
+Bug: 252884414
+Bug: 256052088
+Bug: 255984757
+Bug: 227283224
+Test: art/test/testrunner/testrunner.py --host --64 --optimizing -b
+Change-Id: Id0b7894c0d63591e3b354520a47252bf8b91f44f
+---
+ compiler/optimizing/inliner.cc                | 15 +++--
+ compiler/optimizing/inliner.h                 |  8 ++-
+ .../optimizing/optimizing_compiler_stats.h    |  1 +
+ .../expected-stderr.txt                       |  0
+ .../expected-stdout.txt                       |  0
+ .../info.txt                                  |  1 +
+ .../src/Main.java                             | 59 +++++++++++++++++++
+ .../src2/other/InaccessibleClass.java         |  2 +-
+ test/639-checker-code-sinking/src/Main.java   | 16 ++++-
+ test/979-const-method-handle/src/Main.java    |  4 +-
+ 10 files changed, 94 insertions(+), 12 deletions(-)
+ create mode 100644 test/2243-checker-not-inline-into-throw/expected-stderr.txt
+ create mode 100644 test/2243-checker-not-inline-into-throw/expected-stdout.txt
+ create mode 100644 test/2243-checker-not-inline-into-throw/info.txt
+ create mode 100644 test/2243-checker-not-inline-into-throw/src/Main.java
+
+diff --git a/compiler/optimizing/inliner.cc b/compiler/optimizing/inliner.cc
+index f73c0d38e4..f51f2fe66d 100644
+--- a/compiler/optimizing/inliner.cc
++++ b/compiler/optimizing/inliner.cc
+@@ -1416,9 +1416,9 @@ bool HInliner::IsInliningSupported(const HInvoke* invoke_instruction,
+   return true;
+ }
+ 
+-// Returns whether our resource limits allow inlining this method.
+-bool HInliner::IsInliningBudgetAvailable(ArtMethod* method,
+-                                         const CodeItemDataAccessor& accessor) const {
++bool HInliner::IsInliningEncouraged(const HInvoke* invoke_instruction,
++                                    ArtMethod* method,
++                                    const CodeItemDataAccessor& accessor) const {
+   if (CountRecursiveCallsOf(method) > kMaximumNumberOfRecursiveCalls) {
+     LOG_FAIL(stats_, MethodCompilationStat::kNotInlinedRecursiveBudget)
+         << "Method "
+@@ -1438,6 +1438,13 @@ bool HInliner::IsInliningBudgetAvailable(ArtMethod* method,
+     return false;
+   }
+ 
++  if (invoke_instruction->GetBlock()->GetLastInstruction()->IsThrow()) {
++    LOG_FAIL(stats_, MethodCompilationStat::kNotInlinedEndsWithThrow)
++        << "Method " << method->PrettyMethod()
++        << " is not inlined because its block ends with a throw";
++    return false;
++  }
++
+   return true;
+ }
+ 
+@@ -1503,7 +1510,7 @@ bool HInliner::TryBuildAndInline(HInvoke* invoke_instruction,
+     return false;
+   }
+ 
+-  if (!IsInliningBudgetAvailable(method, accessor)) {
++  if (!IsInliningEncouraged(invoke_instruction, method, accessor)) {
+     return false;
+   }
+ 
+diff --git a/compiler/optimizing/inliner.h b/compiler/optimizing/inliner.h
+index a2c2085e00..294139ded1 100644
+--- a/compiler/optimizing/inliner.h
++++ b/compiler/optimizing/inliner.h
+@@ -129,12 +129,14 @@ class HInliner : public HOptimization {
+                            const CodeItemDataAccessor& accessor) const
+     REQUIRES_SHARED(Locks::mutator_lock_);
+ 
+-  // Returns whether the inlining budget allows inlining method.
++  // Returns whether inlining is encouraged.
+   //
+   // For example, this checks whether the function has grown too large and
+   // inlining should be prevented.
+-  bool IsInliningBudgetAvailable(art::ArtMethod* method, const CodeItemDataAccessor& accessor) const
+-    REQUIRES_SHARED(Locks::mutator_lock_);
++  bool IsInliningEncouraged(const HInvoke* invoke_instruction,
++                            art::ArtMethod* method,
++                            const CodeItemDataAccessor& accessor) const
++      REQUIRES_SHARED(Locks::mutator_lock_);
+ 
+   // Inspects the body of a method (callee_graph) and returns whether it can be
+   // inlined.
+diff --git a/compiler/optimizing/optimizing_compiler_stats.h b/compiler/optimizing/optimizing_compiler_stats.h
+index d458e42608..9f77ae3b7a 100644
+--- a/compiler/optimizing/optimizing_compiler_stats.h
++++ b/compiler/optimizing/optimizing_compiler_stats.h
+@@ -98,6 +98,7 @@ enum class MethodCompilationStat {
+   kNotInlinedNotCompilable,
+   kNotInlinedNotVerified,
+   kNotInlinedCodeItem,
++  kNotInlinedEndsWithThrow,
+   kNotInlinedWont,
+   kNotInlinedRecursiveBudget,
+   kNotInlinedPolymorphicRecursiveBudget,
+diff --git a/test/2243-checker-not-inline-into-throw/expected-stderr.txt b/test/2243-checker-not-inline-into-throw/expected-stderr.txt
+new file mode 100644
+index 0000000000..e69de29bb2
+diff --git a/test/2243-checker-not-inline-into-throw/expected-stdout.txt b/test/2243-checker-not-inline-into-throw/expected-stdout.txt
+new file mode 100644
+index 0000000000..e69de29bb2
+diff --git a/test/2243-checker-not-inline-into-throw/info.txt b/test/2243-checker-not-inline-into-throw/info.txt
+new file mode 100644
+index 0000000000..a2ded8177c
+--- /dev/null
++++ b/test/2243-checker-not-inline-into-throw/info.txt
+@@ -0,0 +1 @@
++Tests that we don't inline methods if their basic blocks end with a throw.
+diff --git a/test/2243-checker-not-inline-into-throw/src/Main.java b/test/2243-checker-not-inline-into-throw/src/Main.java
+new file mode 100644
+index 0000000000..6f1280c026
+--- /dev/null
++++ b/test/2243-checker-not-inline-into-throw/src/Main.java
+@@ -0,0 +1,59 @@
++/*
++ * Copyright (C) 2022 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++public class Main {
++  public static void main(String[] args) throws Exception {
++    try {
++      $noinline$testEndsWithThrow();
++      throw new Exception("Unreachable");
++    } catch (Error expected) {
++    }
++
++    try {
++      $noinline$testEndsWithThrowButNotDirectly();
++      throw new Exception("Unreachable");
++    } catch (Error expected) {
++    }
++  }
++
++  // Empty methods are easy to inline anywhere.
++  private static void easyToInline() {}
++  private static void $inline$easyToInline() {}
++
++  /// CHECK-START: int Main.$noinline$testEndsWithThrow() inliner (before)
++  /// CHECK: InvokeStaticOrDirect method_name:Main.easyToInline
++
++  /// CHECK-START: int Main.$noinline$testEndsWithThrow() inliner (after)
++  /// CHECK: InvokeStaticOrDirect method_name:Main.easyToInline
++  static int $noinline$testEndsWithThrow() {
++    easyToInline();
++    throw new Error("");
++  }
++
++  // Currently we only stop inlining if the method's basic block ends with a throw. We do not stop
++  // inlining for methods that eventually always end with a throw.
++  static int $noinline$testEndsWithThrowButNotDirectly() {
++    $inline$easyToInline();
++    if (justABoolean) {
++      $inline$easyToInline();
++    } else {
++      $inline$easyToInline();
++    }
++    throw new Error("");
++  }
++
++  static boolean justABoolean;
++}
+diff --git a/test/536-checker-needs-access-check/src2/other/InaccessibleClass.java b/test/536-checker-needs-access-check/src2/other/InaccessibleClass.java
+index 646cc7eafb..6fd99ef1bb 100644
+--- a/test/536-checker-needs-access-check/src2/other/InaccessibleClass.java
++++ b/test/536-checker-needs-access-check/src2/other/InaccessibleClass.java
+@@ -31,7 +31,7 @@ import other2.GetInaccessibleClass;
+     Class<?> klass = null;
+     try {
+       klass = GetInaccessibleClass.$inline$get();
+-      throw new Error("Unreachable");
++      System.out.println("Unreachable");
+     } catch (IllegalAccessError expected) {}
+     return klass;
+   }
+diff --git a/test/639-checker-code-sinking/src/Main.java b/test/639-checker-code-sinking/src/Main.java
+index 27df41f7b4..f5617185d1 100644
+--- a/test/639-checker-code-sinking/src/Main.java
++++ b/test/639-checker-code-sinking/src/Main.java
+@@ -710,6 +710,18 @@ public class Main {
+   // `NewArray` (and maybe from `LoadClass`). However, code sinking was pruning
+   // the environment of the `NewArray`, leading to a crash when compiling the
+   // code below on the device (we do not inline `core-oj` on host). b/252799691
++
++  // We currently have a heuristic that disallows inlining methods if their basic blocks end with a
++  // throw. We could add code so that `requireNonNull`'s block doesn't end with a throw but that
++  // would mean that the string builder optimization wouldn't fire as it requires all uses to be in
++  // the same block. If `requireNonNull` is inlined at some point, we need to re-mark it as $inline$
++  // so that the test is operational again.
++
++  /// CHECK-START: void Main.$noinline$twoThrowingPathsAndStringBuilderAppend(java.lang.Object) inliner (before)
++  /// CHECK: InvokeStaticOrDirect method_name:Main.requireNonNull
++
++  /// CHECK-START: void Main.$noinline$twoThrowingPathsAndStringBuilderAppend(java.lang.Object) inliner (after)
++  /// CHECK: InvokeStaticOrDirect method_name:Main.requireNonNull
+   private static void $noinline$twoThrowingPathsAndStringBuilderAppend(Object o) {
+     String s1 = "s1";
+     String s2 = "s2";
+@@ -722,14 +734,14 @@ public class Main {
+     // `StringBuilderAppend` pattern recognition.
+     // (But that does not happen when the `StringBuilder` constructor is
+     // not inlined, see above.)
+-    $inline$requireNonNull(o);
++    requireNonNull(o);
+ 
+     String s1s2 = sb.append(s1).append(s2).toString();
+     sb = null;
+     throw new Error(s1s2);
+   }
+ 
+-  private static void $inline$requireNonNull(Object o) {
++  private static void requireNonNull(Object o) {
+     if (o == null) {
+       throw new Error("Object is null");
+     }
+diff --git a/test/979-const-method-handle/src/Main.java b/test/979-const-method-handle/src/Main.java
+index 04d782b167..72d529b68b 100644
+--- a/test/979-const-method-handle/src/Main.java
++++ b/test/979-const-method-handle/src/Main.java
+@@ -267,14 +267,14 @@ class Main {
+         // inline the loading.
+         try {
+           $inline$getPrivateField();
+-          throw new Error("Expected IllegalAccessError");
++          System.out.println("Expected IllegalAccessError");
+         } catch (IllegalAccessError e) {
+           // expected
+         }
+ 
+         try {
+           $inline$missingType();
+-          throw new Error("Expected NoClassDefFoundError");
++          System.out.println("Expected NoClassDefFoundError");
+         } catch (NoClassDefFoundError e) {
+           // expected
+         }
+-- 
+2.42.0
+

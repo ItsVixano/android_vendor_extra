@@ -1,0 +1,45 @@
+From 575a77793d061060ad136d8032d13edaf98e36cf Mon Sep 17 00:00:00 2001
+From: Wen Zhang <zhangwen8@xiaomi.corp-partner.google.com>
+Date: Tue, 29 Nov 2022 12:47:34 +0000
+Subject: [PATCH 55/72] Switch back to the application on /system when UID and
+ path changed
+
+If the application is a system update app, and the UID of application on /system is changed by OTA, and the version on /system is smaller than the version on /data.
+It will remove disabledPkgSetting, and install as a normal app, so need swich back to the application on /system.
+
+Bug: 260683094
+Change-Id: I90431cac15c8dde66eee81c42c91841bd92a96cf
+Test: mamual
+---
+ .../java/com/android/server/pm/InstallPackageHelper.java | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/services/core/java/com/android/server/pm/InstallPackageHelper.java b/services/core/java/com/android/server/pm/InstallPackageHelper.java
+index cbb1afb1..293f7e99 100644
+--- a/services/core/java/com/android/server/pm/InstallPackageHelper.java
++++ b/services/core/java/com/android/server/pm/InstallPackageHelper.java
+@@ -3880,13 +3880,20 @@ final class InstallPackageHelper {
+                 && !pkgSetting.getPathString().equals(parsedPackage.getPath());
+         final boolean newPkgVersionGreater = pkgAlreadyExists
+                 && parsedPackage.getLongVersionCode() > pkgSetting.getVersionCode();
++        final boolean newSharedUserSetting = pkgAlreadyExists
++                && (initialScanRequest.mOldSharedUserSetting
++                != initialScanRequest.mSharedUserSetting);
+         final boolean isSystemPkgBetter = scanSystemPartition && isSystemPkgUpdated
+-                && newPkgChangedPaths && newPkgVersionGreater;
++                && newPkgChangedPaths && (newPkgVersionGreater || newSharedUserSetting);
+         if (isSystemPkgBetter) {
+             // The version of the application on /system is greater than the version on
+             // /data. Switch back to the application on /system.
+             // It's safe to assume the application on /system will correctly scan. If not,
+             // there won't be a working copy of the application.
++            // Also, if the sharedUserSetting of the application on /system is different
++            // from the sharedUserSetting on /data, switch back to the application on /system.
++            // We should trust the sharedUserSetting on /system, even if the application
++            // version on /system is smaller than the version on /data.
+             synchronized (mPm.mLock) {
+                 // just remove the loaded entries from package lists
+                 mPm.mPackages.remove(pkgSetting.getPackageName());
+-- 
+2.42.0
+

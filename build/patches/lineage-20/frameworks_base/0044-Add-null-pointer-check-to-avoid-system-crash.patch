@@ -1,0 +1,43 @@
+From 2d2c03eca90f7bb93055511ae971fc0ae5651474 Mon Sep 17 00:00:00 2001
+From: Jessie Hao <juan.hao@nxp.com>
+Date: Tue, 10 May 2022 14:47:05 +0800
+Subject: [PATCH 44/72] Add null pointer check to avoid system crash.
+
+Add null pointer check to avoid system crash.
+Meet the below crash log during some app operations then app exits.
+
+F DEBUG   : signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x78
+F DEBUG   : Cause: null pointer dereference
+F DEBUG   : backtrace:
+F DEBUG   :       #00 pc 0000000000323858  /system/lib64/libhwui.so
+(android::uirenderer::DeferredLayerUpdater::apply()+40)
+F DEBUG   :       #01 pc 0000000000323040  /system/lib64/libhwui.so
+(_ZNSt3__110__function6__funcIZN7android10uirenderer12renderthread13
+DrawFrameTask11postAndWaitEvE3$_0NS_9allocatorIS6_EEFvvEEclEv$c1671e
+787f244890c877724752face20+416)
+
+Bug: b/243310920
+Signed-off-by: Jessie Hao <juan.hao@nxp.com>
+Change-Id: I77226be2bd235852675bb4f7a29589e360269b33
+---
+ libs/hwui/renderthread/DrawFrameTask.cpp | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/libs/hwui/renderthread/DrawFrameTask.cpp b/libs/hwui/renderthread/DrawFrameTask.cpp
+index 4ceb13eb..3c754993 100644
+--- a/libs/hwui/renderthread/DrawFrameTask.cpp
++++ b/libs/hwui/renderthread/DrawFrameTask.cpp
+@@ -243,7 +243,9 @@ bool DrawFrameTask::syncFrameState(TreeInfo& info) {
+     mContext->unpinImages();
+ 
+     for (size_t i = 0; i < mLayers.size(); i++) {
+-        mLayers[i]->apply();
++        if (mLayers[i]) {
++            mLayers[i]->apply();
++        }
+     }
+     mLayers.clear();
+     mContext->setContentDrawBounds(mContentDrawBounds);
+-- 
+2.42.0
+

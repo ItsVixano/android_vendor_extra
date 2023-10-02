@@ -1,0 +1,65 @@
+From 91fef66b1dd58ef9dd1ea55729d14c60eaa41109 Mon Sep 17 00:00:00 2001
+From: hongzuo liu <liuhongzuo@xiaomi.com>
+Date: Tue, 6 Sep 2022 02:51:35 +0000
+Subject: [PATCH 1/8] It's no need to start the dispatch cycle going if the
+ outbound queue was not previously empty.
+
+If the outbound queue was not previpusly empty, it indicates that the connection's pipe is full.We will try start the next dispatch cycle for this connection in "doDispatchCycleFinishedCommand".
+This follows "enqueueDispatchEntriesLocked".
+
+Change-Id: I7736c2bfdb13c35a51b74c46ada7b0f562fecfd9
+Merged-In: I7736c2bfdb13c35a51b74c46ada7b0f562fecfd9
+---
+ .../inputflinger/dispatcher/InputDispatcher.cpp   | 15 ++++++++++++---
+ 1 file changed, 12 insertions(+), 3 deletions(-)
+
+diff --git a/services/inputflinger/dispatcher/InputDispatcher.cpp b/services/inputflinger/dispatcher/InputDispatcher.cpp
+index c2a3f7a7c2..7751308581 100644
+--- a/services/inputflinger/dispatcher/InputDispatcher.cpp
++++ b/services/inputflinger/dispatcher/InputDispatcher.cpp
+@@ -3644,6 +3644,8 @@ void InputDispatcher::synthesizeCancelationEventsForConnectionLocked(
+     target.inputChannel = connection->inputChannel;
+     target.flags = InputTarget::FLAG_DISPATCH_AS_IS;
+ 
++    const bool wasEmpty = connection->outboundQueue.empty();
++
+     for (size_t i = 0; i < cancelationEvents.size(); i++) {
+         std::unique_ptr<EventEntry> cancelationEventEntry = std::move(cancelationEvents[i]);
+         switch (cancelationEventEntry->type) {
+@@ -3678,7 +3680,10 @@ void InputDispatcher::synthesizeCancelationEventsForConnectionLocked(
+                                    InputTarget::FLAG_DISPATCH_AS_IS);
+     }
+ 
+-    startDispatchCycleLocked(currentTime, connection);
++    // If the outbound queue was previously empty, start the dispatch cycle going.
++    if (wasEmpty && !connection->outboundQueue.empty()) {
++        startDispatchCycleLocked(currentTime, connection);
++    }
+ }
+ 
+ void InputDispatcher::synthesizePointerDownEventsForConnectionLocked(
+@@ -3712,6 +3717,8 @@ void InputDispatcher::synthesizePointerDownEventsForConnectionLocked(
+     target.inputChannel = connection->inputChannel;
+     target.flags = targetFlags;
+ 
++    const bool wasEmpty = connection->outboundQueue.empty();
++
+     for (std::unique_ptr<EventEntry>& downEventEntry : downEvents) {
+         switch (downEventEntry->type) {
+             case EventEntry::Type::MOTION: {
+@@ -3737,8 +3744,10 @@ void InputDispatcher::synthesizePointerDownEventsForConnectionLocked(
+         enqueueDispatchEntryLocked(connection, std::move(downEventEntry), target,
+                                    InputTarget::FLAG_DISPATCH_AS_IS);
+     }
+-
+-    startDispatchCycleLocked(currentTime, connection);
++    // If the outbound queue was previously empty, start the dispatch cycle going.
++    if (wasEmpty && !connection->outboundQueue.empty()) {
++        startDispatchCycleLocked(currentTime, connection);
++    }
+ }
+ 
+ void InputDispatcher::synthesizeCancelationEventsForWindowLocked(
+-- 
+2.42.0
+

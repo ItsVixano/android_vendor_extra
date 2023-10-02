@@ -1,0 +1,85 @@
+From 866c4b85a84d8bdc10e42bc9b6193a2bcd944b0e Mon Sep 17 00:00:00 2001
+From: huyuxin <huyuxin@xiaomi.com>
+Date: Tue, 6 Sep 2022 11:30:17 +0800
+Subject: [PATCH 26/30] OnDeviceRefresh::GetSystemServerImagePath support
+ system_ext partition
+
+The /system_ext partition is assumed to be the OEM-specific extension
+to the /system partition.
+OEM installed SYSTEMSERVERJAR on the system_ext partition does not
+require additional execution of dex2oat
+
+Bug: 245383870
+Test: atest art_standalone_odrefresh_tests
+
+Change-Id: Ib7b74ef50d50a5203adc8f14efcecf0e7920139a
+Signed-off-by: huyuxin <huyuxin@xiaomi.com>
+---
+ libartbase/base/file_utils.cc | 21 ++++++++++++++++++++-
+ libartbase/base/file_utils.h  |  3 +++
+ odrefresh/odrefresh.cc        |  2 +-
+ 3 files changed, 24 insertions(+), 2 deletions(-)
+
+diff --git a/libartbase/base/file_utils.cc b/libartbase/base/file_utils.cc
+index 0b670e73e9..0617778da6 100644
+--- a/libartbase/base/file_utils.cc
++++ b/libartbase/base/file_utils.cc
+@@ -679,8 +679,27 @@ bool LocationIsOnSystem(const std::string& location) {
+ #endif
+ }
+ 
++bool LocationIsOnSystemExt(const std::string& location) {
++#ifdef _WIN32
++  UNUSED(location);
++  LOG(FATAL) << "LocationIsOnSystemExt is unsupported on Windows.";
++  return false;
++#else
++  return IsLocationOn(location,
++                      kAndroidSystemExtRootEnvVar,
++                      kAndroidSystemExtRootDefaultPath) ||
++         // When the 'system_ext' partition is not present, builds will create
++         // '/system/system_ext' instead.
++         IsLocationOn(location,
++                      kAndroidRootEnvVar,
++                      kAndroidRootDefaultPath,
++                      /* subdir= */ "system_ext/");
++#endif
++}
++
+ bool LocationIsTrusted(const std::string& location, bool trust_art_apex_data_files) {
+-  if (LocationIsOnSystem(location) || LocationIsOnArtModule(location)) {
++  if (LocationIsOnSystem(location) || LocationIsOnSystemExt(location)
++        || LocationIsOnArtModule(location)) {
+     return true;
+   }
+   return LocationIsOnArtApexData(location) & trust_art_apex_data_files;
+diff --git a/libartbase/base/file_utils.h b/libartbase/base/file_utils.h
+index c1c45bcf87..30daf108c7 100644
+--- a/libartbase/base/file_utils.h
++++ b/libartbase/base/file_utils.h
+@@ -160,6 +160,9 @@ bool LocationIsOnI18nModule(std::string_view location);
+ // Return whether the location is on system (i.e. android root).
+ bool LocationIsOnSystem(const std::string& location);
+ 
++// Return whether the location is on system_ext
++bool LocationIsOnSystemExt(const std::string& location);
++
+ // Return whether the location is on system/framework (i.e. $ANDROID_ROOT/framework).
+ bool LocationIsOnSystemFramework(std::string_view location);
+ 
+diff --git a/odrefresh/odrefresh.cc b/odrefresh/odrefresh.cc
+index f829bb8ee1..306692a9c6 100644
+--- a/odrefresh/odrefresh.cc
++++ b/odrefresh/odrefresh.cc
+@@ -781,7 +781,7 @@ std::string OnDeviceRefresh::GetSystemServerImagePath(bool on_system,
+     const std::string image_name = ReplaceFileExtension(jar_name, "art");
+     const char* isa_str = GetInstructionSetString(config_.GetSystemServerIsa());
+     // Typically "/system/framework/oat/<isa>/services.art".
+-    return Concatenate({GetAndroidRoot(), "/framework/oat/", isa_str, "/", image_name});
++    return Concatenate({android::base::Dirname(jar_path), "/oat/", isa_str, "/", image_name});
+   } else {
+     // Typically
+     // "/data/misc/apexdata/.../dalvik-cache/<isa>/system@framework@services.jar@classes.art".
+-- 
+2.42.0
+

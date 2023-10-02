@@ -1,0 +1,32 @@
+From 4082f583421611a24ba5982abc7da078a46a71d4 Mon Sep 17 00:00:00 2001
+From: Almaz Mingaleev <mingaleev@google.com>
+Date: Thu, 9 Jun 2022 11:54:28 +0100
+Subject: [PATCH 31/72] Do not preload ThreadLocalRandom class.
+
+ThreadLocalRandom.seeder field uses time in its initialization.
+Preloading the class fixes initial state of ThreadLocalRandom,
+which leads to the same sequence of generated numbers across
+different app runs.
+
+Bug: 234816154
+Test: verified manually that TLR.current().nextInt does not return
+the same sequence of numbers.
+
+Change-Id: I80868217e02862e8d0a568ea096e22e919ec06e3
+Merged-In: I80868217e02862e8d0a568ea096e22e919ec06e3
+---
+ config/preloaded-classes-denylist | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/config/preloaded-classes-denylist b/config/preloaded-classes-denylist
+index da4b2551..02f2df61 100644
+--- a/config/preloaded-classes-denylist
++++ b/config/preloaded-classes-denylist
+@@ -8,3 +8,4 @@ gov.nist.core.net.DefaultNetworkLayer
+ android.net.rtp.AudioGroup
+ android.net.rtp.AudioStream
+ android.net.rtp.RtpStream
++java.util.concurrent.ThreadLocalRandom
+-- 
+2.42.0
+

@@ -1,0 +1,40 @@
+From e36719cdba736d4ff359373e606be00177f56e23 Mon Sep 17 00:00:00 2001
+From: Steven Moreland <smoreland@google.com>
+Date: Wed, 18 May 2022 22:04:49 +0000
+Subject: [PATCH 2/8] libbinder: O_CLOFORK
+
+You can't use binder after forking, so we can drop the FD. The binder
+driver doesn't support this (once the FD is open, we would need to
+open a new context in the child process). So, the userspace API would
+need to handle resetting all state. However, in general, handling this
+for multi-threaded processes (because of needing to take all locks by
+all libraries used by all threads and restoring state, etc...) is too
+complicated to make work in Android.
+
+Bug: 232904068
+Bug: 244525876
+Test: binderLibTest
+Change-Id: I38c354af2c69804a40dc2774086a9ab77d158ede
+(cherry picked from commit df732baf74ca36d50e60c31179e6364d8fd4aa06)
+---
+ libs/binder/ProcessState.cpp | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/libs/binder/ProcessState.cpp b/libs/binder/ProcessState.cpp
+index 4a01d8176d..e1220c04ae 100644
+--- a/libs/binder/ProcessState.cpp
++++ b/libs/binder/ProcessState.cpp
+@@ -170,6 +170,10 @@ void ProcessState::childPostFork() {
+     // the thread handler is installed
+     if (gProcess) {
+         gProcess->mForked = true;
++
++        // "O_CLOFORK"
++        close(gProcess->mDriverFD);
++        gProcess->mDriverFD = -1;
+     }
+     gProcessMutex.unlock();
+ }
+-- 
+2.42.0
+

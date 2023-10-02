@@ -1,0 +1,30 @@
+From c6f0d113008686534fc96583ad66c5dd563d42bc Mon Sep 17 00:00:00 2001
+From: Wen Zhang <zhangwen8@xiaomi.corp-partner.google.com>
+Date: Tue, 14 Mar 2023 13:31:34 +0000
+Subject: [PATCH 49/72] check whitelisted packages exclude nonsystem app
+
+avoid set uninstalled for nonsystem app when first boot
+
+Bug:273457409
+Change-Id: I77d19122de67869340decaf979b8f08f77070dd0
+Test: Build
+---
+ .../java/com/android/server/pm/UserSystemPackageInstaller.java  | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/services/core/java/com/android/server/pm/UserSystemPackageInstaller.java b/services/core/java/com/android/server/pm/UserSystemPackageInstaller.java
+index dfb4f242..637380c5 100644
+--- a/services/core/java/com/android/server/pm/UserSystemPackageInstaller.java
++++ b/services/core/java/com/android/server/pm/UserSystemPackageInstaller.java
+@@ -222,7 +222,7 @@ class UserSystemPackageInstaller {
+             final Set<String> userAllowlist = getInstallablePackagesForUserId(userId);
+ 
+             pmInt.forEachPackageState(packageState -> {
+-                if (packageState.getPkg() == null) {
++                if (packageState.getPkg() == null || !packageState.isSystem()) {
+                     return;
+                 }
+                 boolean install = (userAllowlist == null
+-- 
+2.42.0
+

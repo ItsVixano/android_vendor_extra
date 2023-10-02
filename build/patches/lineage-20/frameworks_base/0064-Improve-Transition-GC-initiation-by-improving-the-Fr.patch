@@ -1,0 +1,60 @@
+From 0982c861b7fed897b4a291e74cb953c1ab1010e3 Mon Sep 17 00:00:00 2001
+From: Wessam Hassanein <wessam@google.com>
+Date: Thu, 9 Mar 2023 01:56:04 +0000
+Subject: [PATCH 64/72] Improve Transition GC initiation by improving the
+ Frameworks triggering signal
+
+Transition GC should be initiated when the app status transitions into
+the cached state from a non-cached state.
+
+Test: Local testing
+Bug: 272381448
+Change-Id: I483a3ddaa11ed037d32c5481999fd996e2e2629a
+---
+ core/java/android/app/ActivityThread.java | 21 +++++++++++++++------
+ 1 file changed, 15 insertions(+), 6 deletions(-)
+
+diff --git a/core/java/android/app/ActivityThread.java b/core/java/android/app/ActivityThread.java
+index 10ca8990..58cfd651 100644
+--- a/core/java/android/app/ActivityThread.java
++++ b/core/java/android/app/ActivityThread.java
+@@ -3428,8 +3428,13 @@ public final class ActivityThread extends ClientTransactionHandler
+             if (mLastProcessState == processState) {
+                 return;
+             }
++            // Do not issue a transitional GC if we are transitioning between 2 cached states.
++            // Only update if the state flips between cached and uncached or vice versa
++            if (ActivityManager.isProcStateCached(mLastProcessState)
++                    != ActivityManager.isProcStateCached(processState)) {
++                updateVmProcessState(processState);
++            }
+             mLastProcessState = processState;
+-            updateVmProcessState(processState);
+             if (localLOGV) {
+                 Slog.i(TAG, "******************* PROCESS STATE CHANGED TO: " + processState
+                         + (fromIpc ? " (from ipc" : ""));
+@@ -3438,12 +3443,16 @@ public final class ActivityThread extends ClientTransactionHandler
+     }
+ 
+     /** Update VM state based on ActivityManager.PROCESS_STATE_* constants. */
++    // Currently ART VM only uses state updates for Transitional GC, and thus
++    // this function initiates a Transitional GC for transitions into Cached apps states.
+     private void updateVmProcessState(int processState) {
+-        // TODO: Tune this since things like gmail sync are important background but not jank
+-        // perceptible.
+-        final int state = processState <= ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND
+-                ? VM_PROCESS_STATE_JANK_PERCEPTIBLE
+-                : VM_PROCESS_STATE_JANK_IMPERCEPTIBLE;
++        // Only a transition into Cached state should result in a Transitional GC request
++        // to the ART runtime. Update VM state to JANK_IMPERCEPTIBLE in that case.
++        // Note that there are 4 possible cached states currently, all of which are
++        // JANK_IMPERCEPTIBLE from GC point of view.
++        final int state = ActivityManager.isProcStateCached(processState)
++                ? VM_PROCESS_STATE_JANK_IMPERCEPTIBLE
++                : VM_PROCESS_STATE_JANK_PERCEPTIBLE;
+         VMRuntime.getRuntime().updateProcessState(state);
+     }
+ 
+-- 
+2.42.0
+

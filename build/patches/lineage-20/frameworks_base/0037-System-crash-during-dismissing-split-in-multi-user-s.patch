@@ -1,0 +1,51 @@
+From f749495b8dd9e8810cb2d330ed6f0d8f17c33f89 Mon Sep 17 00:00:00 2001
+From: "pioush.kumar-IN009423" <pioush.kumar@oppo.com>
+Date: Tue, 22 Nov 2022 15:36:35 +0530
+Subject: [PATCH 37/72] System crash during dismissing split in multi-user
+ scenario
+
+Problem: {
+    1. Switch to guest user or any other user.
+    2. Open any Settings and any other app in split
+    3. Switch any language in the settings
+    3. Try to dismiss split. Crash will happen in system
+}
+
+Solution: {
+    1. Fixing AOSP logic to make application with uid equals to system in multi-user scenario.
+    2. So as a result mIsActivityConfigOverrideAllowed is false.
+    3. So Process's configuration is not changed which will eventually does not effect whole configuration.
+}
+
+Bug: 262486679
+
+Change-Id: I8f078f41ca0fd4dbde71407efe395c7376b337d8
+Signed-off-by: pioush.kumar-IN009423 <pioush.kumar@oppo.com>
+---
+ .../java/com/android/server/wm/WindowProcessController.java    | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/services/core/java/com/android/server/wm/WindowProcessController.java b/services/core/java/com/android/server/wm/WindowProcessController.java
+index 04799204..4907eb6e 100644
+--- a/services/core/java/com/android/server/wm/WindowProcessController.java
++++ b/services/core/java/com/android/server/wm/WindowProcessController.java
+@@ -64,6 +64,7 @@ import android.os.LocaleList;
+ import android.os.Message;
+ import android.os.Process;
+ import android.os.RemoteException;
++import android.os.UserHandle;
+ import android.util.ArraySet;
+ import android.util.Log;
+ import android.util.Slog;
+@@ -262,7 +263,7 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
+ 
+         boolean isSysUiPackage = info.packageName.equals(
+                 mAtm.getSysUiServiceComponentLocked().getPackageName());
+-        if (isSysUiPackage || mUid == Process.SYSTEM_UID) {
++        if (isSysUiPackage || UserHandle.getAppId(mUid) == Process.SYSTEM_UID) {
+             // This is a system owned process and should not use an activity config.
+             // TODO(b/151161907): Remove after support for display-independent (raw) SysUi configs.
+             mIsActivityConfigOverrideAllowed = false;
+-- 
+2.42.0
+

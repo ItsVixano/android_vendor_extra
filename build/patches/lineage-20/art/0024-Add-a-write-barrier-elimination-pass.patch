@@ -1,0 +1,1733 @@
+From 2fbdc1ac7e3e9192487d04c819c6840d046b6964 Mon Sep 17 00:00:00 2001
+From: Santiago Aboy Solanes <solanes@google.com>
+Date: Tue, 3 Jan 2023 16:20:50 +0000
+Subject: [PATCH 24/30] Add a write barrier elimination pass
+
+We can eliminate redundant write barriers as we don't need several
+for the same receiver. For example:
+
+```
+MyObject o;
+o.inner_obj = io;
+o.inner_obj2 = io2;
+o.inner_obj3 = io3;
+```
+
+We can keep the write barrier for `inner_obj` and remove the other
+two.
+
+Note that we cannot perform this optimization across
+invokes, suspend check, or instructions that can throw.
+
+Local improvements (pixel 5, speed compile):
+ * System server: -280KB (-0.56%)
+ * SystemUIGoogle: -330KB (-1.16%)
+ * AGSA: -3876KB (-1.19%)
+
+Bug: 260843353
+Fixes: 260843353
+Change-Id: Ibf98efbe891ee00e46125853c3e97ae30aa3ff30
+---
+ compiler/Android.bp                           |   1 +
+ compiler/optimizing/code_generator_arm64.cc   |  34 +-
+ compiler/optimizing/code_generator_arm64.h    |   5 +-
+ .../optimizing/code_generator_arm_vixl.cc     |  58 ++-
+ compiler/optimizing/code_generator_arm_vixl.h |   9 +-
+ compiler/optimizing/code_generator_x86.cc     |  82 +++--
+ compiler/optimizing/code_generator_x86.h      |  17 +-
+ compiler/optimizing/code_generator_x86_64.cc  |  60 +++-
+ compiler/optimizing/code_generator_x86_64.h   |   8 +-
+ compiler/optimizing/graph_visualizer.cc       |   6 +-
+ compiler/optimizing/intrinsics_x86.cc         |  17 +-
+ compiler/optimizing/intrinsics_x86_64.cc      |  23 +-
+ compiler/optimizing/nodes.h                   |  73 +++-
+ compiler/optimizing/optimization.cc           |   6 +
+ compiler/optimizing/optimization.h            |   1 +
+ compiler/optimizing/optimizing_compiler.cc    |   7 +
+ .../optimizing/optimizing_compiler_stats.h    |   2 +
+ .../optimizing/write_barrier_elimination.cc   | 161 +++++++++
+ .../optimizing/write_barrier_elimination.h    |  56 +++
+ libartbase/base/arena_allocator.cc            |   1 +
+ libartbase/base/arena_allocator.h             |   1 +
+ .../expected-stderr.txt                       |   0
+ .../expected-stdout.txt                       |   0
+ .../info.txt                                  |   1 +
+ .../src/Main.java                             | 332 ++++++++++++++++++
+ 25 files changed, 854 insertions(+), 107 deletions(-)
+ create mode 100644 compiler/optimizing/write_barrier_elimination.cc
+ create mode 100644 compiler/optimizing/write_barrier_elimination.h
+ create mode 100644 test/2247-checker-write-barrier-elimination/expected-stderr.txt
+ create mode 100644 test/2247-checker-write-barrier-elimination/expected-stdout.txt
+ create mode 100644 test/2247-checker-write-barrier-elimination/info.txt
+ create mode 100644 test/2247-checker-write-barrier-elimination/src/Main.java
+
+diff --git a/compiler/Android.bp b/compiler/Android.bp
+index 14885c68cc..b2e3981783 100644
+--- a/compiler/Android.bp
++++ b/compiler/Android.bp
+@@ -94,6 +94,7 @@ art_cc_defaults {
+         "optimizing/ssa_phi_elimination.cc",
+         "optimizing/stack_map_stream.cc",
+         "optimizing/superblock_cloner.cc",
++        "optimizing/write_barrier_elimination.cc",
+         "trampolines/trampoline_compiler.cc",
+         "utils/assembler.cc",
+         "utils/jni_macro_assembler.cc",
+diff --git a/compiler/optimizing/code_generator_arm64.cc b/compiler/optimizing/code_generator_arm64.cc
+index 2a0b481b2d..50a50ccc39 100644
+--- a/compiler/optimizing/code_generator_arm64.cc
++++ b/compiler/optimizing/code_generator_arm64.cc
+@@ -44,6 +44,7 @@
+ #include "mirror/var_handle.h"
+ #include "offsets.h"
+ #include "optimizing/common_arm64.h"
++#include "optimizing/nodes.h"
+ #include "thread.h"
+ #include "utils/arm64/assembler_arm64.h"
+ #include "utils/assembler.h"
+@@ -1364,12 +1365,12 @@ void CodeGeneratorARM64::AddLocationAsTemp(Location location, LocationSummary* l
+   }
+ }
+ 
+-void CodeGeneratorARM64::MarkGCCard(Register object, Register value, bool value_can_be_null) {
++void CodeGeneratorARM64::MarkGCCard(Register object, Register value, bool emit_null_check) {
+   UseScratchRegisterScope temps(GetVIXLAssembler());
+   Register card = temps.AcquireX();
+   Register temp = temps.AcquireW();   // Index within the CardTable - 32bit.
+   vixl::aarch64::Label done;
+-  if (value_can_be_null) {
++  if (emit_null_check) {
+     __ Cbz(value, &done);
+   }
+   // Load the address of the card table into `card`.
+@@ -1391,7 +1392,7 @@ void CodeGeneratorARM64::MarkGCCard(Register object, Register value, bool value_
+   // of the card to mark; and 2. to load the `kCardDirty` value) saves a load
+   // (no need to explicitly load `kCardDirty` as an immediate value).
+   __ Strb(card, MemOperand(card, temp.X()));
+-  if (value_can_be_null) {
++  if (emit_null_check) {
+     __ Bind(&done);
+   }
+ }
+@@ -2165,7 +2166,8 @@ void LocationsBuilderARM64::HandleFieldSet(HInstruction* instruction) {
+ 
+ void InstructionCodeGeneratorARM64::HandleFieldSet(HInstruction* instruction,
+                                                    const FieldInfo& field_info,
+-                                                   bool value_can_be_null) {
++                                                   bool value_can_be_null,
++                                                   WriteBarrierKind write_barrier_kind) {
+   DCHECK(instruction->IsInstanceFieldSet() || instruction->IsStaticFieldSet());
+   bool is_predicated =
+       instruction->IsInstanceFieldSet() && instruction->AsInstanceFieldSet()->GetIsPredicatedSet();
+@@ -2205,8 +2207,12 @@ void InstructionCodeGeneratorARM64::HandleFieldSet(HInstruction* instruction,
+     }
+   }
+ 
+-  if (CodeGenerator::StoreNeedsWriteBarrier(field_type, instruction->InputAt(1))) {
+-    codegen_->MarkGCCard(obj, Register(value), value_can_be_null);
++  if (CodeGenerator::StoreNeedsWriteBarrier(field_type, instruction->InputAt(1)) &&
++      write_barrier_kind != WriteBarrierKind::kDontEmit) {
++    codegen_->MarkGCCard(
++        obj,
++        Register(value),
++        value_can_be_null && write_barrier_kind == WriteBarrierKind::kEmitWithNullCheck);
+   }
+ 
+   if (is_predicated) {
+@@ -2871,7 +2877,11 @@ void InstructionCodeGeneratorARM64::VisitArraySet(HArraySet* instruction) {
+       }
+     }
+ 
+-    codegen_->MarkGCCard(array, value.W(), /* value_can_be_null= */ false);
++    if (instruction->GetWriteBarrierKind() != WriteBarrierKind::kDontEmit) {
++      DCHECK_EQ(instruction->GetWriteBarrierKind(), WriteBarrierKind::kEmitNoNullCheck)
++          << " Already null checked so we shouldn't do it again.";
++      codegen_->MarkGCCard(array, value.W(), /* emit_null_check= */ false);
++    }
+ 
+     if (can_value_be_null) {
+       DCHECK(do_store.IsLinked());
+@@ -3893,7 +3903,10 @@ void LocationsBuilderARM64::VisitInstanceFieldSet(HInstanceFieldSet* instruction
+ }
+ 
+ void InstructionCodeGeneratorARM64::VisitInstanceFieldSet(HInstanceFieldSet* instruction) {
+-  HandleFieldSet(instruction, instruction->GetFieldInfo(), instruction->GetValueCanBeNull());
++  HandleFieldSet(instruction,
++                 instruction->GetFieldInfo(),
++                 instruction->GetValueCanBeNull(),
++                 instruction->GetWriteBarrierKind());
+ }
+ 
+ // Temp is used for read barrier.
+@@ -6156,7 +6169,10 @@ void LocationsBuilderARM64::VisitStaticFieldSet(HStaticFieldSet* instruction) {
+ }
+ 
+ void InstructionCodeGeneratorARM64::VisitStaticFieldSet(HStaticFieldSet* instruction) {
+-  HandleFieldSet(instruction, instruction->GetFieldInfo(), instruction->GetValueCanBeNull());
++  HandleFieldSet(instruction,
++                 instruction->GetFieldInfo(),
++                 instruction->GetValueCanBeNull(),
++                 instruction->GetWriteBarrierKind());
+ }
+ 
+ void LocationsBuilderARM64::VisitStringBuilderAppend(HStringBuilderAppend* instruction) {
+diff --git a/compiler/optimizing/code_generator_arm64.h b/compiler/optimizing/code_generator_arm64.h
+index f4d652c29c..1baca1f67d 100644
+--- a/compiler/optimizing/code_generator_arm64.h
++++ b/compiler/optimizing/code_generator_arm64.h
+@@ -327,7 +327,8 @@ class InstructionCodeGeneratorARM64 : public InstructionCodeGenerator {
+ 
+   void HandleFieldSet(HInstruction* instruction,
+                       const FieldInfo& field_info,
+-                      bool value_can_be_null);
++                      bool value_can_be_null,
++                      WriteBarrierKind write_barrier_kind);
+   void HandleFieldGet(HInstruction* instruction, const FieldInfo& field_info);
+   void HandleCondition(HCondition* instruction);
+ 
+@@ -615,7 +616,7 @@ class CodeGeneratorARM64 : public CodeGenerator {
+   // Emit a write barrier.
+   void MarkGCCard(vixl::aarch64::Register object,
+                   vixl::aarch64::Register value,
+-                  bool value_can_be_null);
++                  bool emit_null_check);
+ 
+   void GenerateMemoryBarrier(MemBarrierKind kind);
+ 
+diff --git a/compiler/optimizing/code_generator_arm_vixl.cc b/compiler/optimizing/code_generator_arm_vixl.cc
+index 09fa598203..c72bdd5161 100644
+--- a/compiler/optimizing/code_generator_arm_vixl.cc
++++ b/compiler/optimizing/code_generator_arm_vixl.cc
+@@ -5727,8 +5727,9 @@ void InstructionCodeGeneratorARMVIXL::GenerateWideAtomicStore(vixl32::Register a
+   __ CompareAndBranchIfNonZero(temp1, &fail);
+ }
+ 
+-void LocationsBuilderARMVIXL::HandleFieldSet(
+-    HInstruction* instruction, const FieldInfo& field_info) {
++void LocationsBuilderARMVIXL::HandleFieldSet(HInstruction* instruction,
++                                             const FieldInfo& field_info,
++                                             WriteBarrierKind write_barrier_kind) {
+   DCHECK(instruction->IsInstanceFieldSet() || instruction->IsStaticFieldSet());
+ 
+   LocationSummary* locations =
+@@ -5751,8 +5752,12 @@ void LocationsBuilderARMVIXL::HandleFieldSet(
+   // Temporary registers for the write barrier.
+   // TODO: consider renaming StoreNeedsWriteBarrier to StoreNeedsGCMark.
+   if (needs_write_barrier) {
+-    locations->AddTemp(Location::RequiresRegister());  // Possibly used for reference poisoning too.
+-    locations->AddTemp(Location::RequiresRegister());
++    if (write_barrier_kind != WriteBarrierKind::kDontEmit) {
++      locations->AddTemp(Location::RequiresRegister());
++      locations->AddTemp(Location::RequiresRegister());
++    } else if (kPoisonHeapReferences) {
++      locations->AddTemp(Location::RequiresRegister());
++    }
+   } else if (generate_volatile) {
+     // ARM encoding have some additional constraints for ldrexd/strexd:
+     // - registers need to be consecutive
+@@ -5773,7 +5778,8 @@ void LocationsBuilderARMVIXL::HandleFieldSet(
+ 
+ void InstructionCodeGeneratorARMVIXL::HandleFieldSet(HInstruction* instruction,
+                                                      const FieldInfo& field_info,
+-                                                     bool value_can_be_null) {
++                                                     bool value_can_be_null,
++                                                     WriteBarrierKind write_barrier_kind) {
+   DCHECK(instruction->IsInstanceFieldSet() || instruction->IsStaticFieldSet());
+ 
+   LocationSummary* locations = instruction->GetLocations();
+@@ -5889,10 +5895,16 @@ void InstructionCodeGeneratorARMVIXL::HandleFieldSet(HInstruction* instruction,
+       UNREACHABLE();
+   }
+ 
+-  if (CodeGenerator::StoreNeedsWriteBarrier(field_type, instruction->InputAt(1))) {
++  if (CodeGenerator::StoreNeedsWriteBarrier(field_type, instruction->InputAt(1)) &&
++      write_barrier_kind != WriteBarrierKind::kDontEmit) {
+     vixl32::Register temp = RegisterFrom(locations->GetTemp(0));
+     vixl32::Register card = RegisterFrom(locations->GetTemp(1));
+-    codegen_->MarkGCCard(temp, card, base, RegisterFrom(value), value_can_be_null);
++    codegen_->MarkGCCard(
++        temp,
++        card,
++        base,
++        RegisterFrom(value),
++        value_can_be_null && write_barrier_kind == WriteBarrierKind::kEmitWithNullCheck);
+   }
+ 
+   if (is_volatile) {
+@@ -6165,11 +6177,14 @@ void InstructionCodeGeneratorARMVIXL::HandleFieldGet(HInstruction* instruction,
+ }
+ 
+ void LocationsBuilderARMVIXL::VisitInstanceFieldSet(HInstanceFieldSet* instruction) {
+-  HandleFieldSet(instruction, instruction->GetFieldInfo());
++  HandleFieldSet(instruction, instruction->GetFieldInfo(), instruction->GetWriteBarrierKind());
+ }
+ 
+ void InstructionCodeGeneratorARMVIXL::VisitInstanceFieldSet(HInstanceFieldSet* instruction) {
+-  HandleFieldSet(instruction, instruction->GetFieldInfo(), instruction->GetValueCanBeNull());
++  HandleFieldSet(instruction,
++                 instruction->GetFieldInfo(),
++                 instruction->GetValueCanBeNull(),
++                 instruction->GetWriteBarrierKind());
+ }
+ 
+ void LocationsBuilderARMVIXL::VisitInstanceFieldGet(HInstanceFieldGet* instruction) {
+@@ -6202,11 +6217,14 @@ void InstructionCodeGeneratorARMVIXL::VisitStaticFieldGet(HStaticFieldGet* instr
+ }
+ 
+ void LocationsBuilderARMVIXL::VisitStaticFieldSet(HStaticFieldSet* instruction) {
+-  HandleFieldSet(instruction, instruction->GetFieldInfo());
++  HandleFieldSet(instruction, instruction->GetFieldInfo(), instruction->GetWriteBarrierKind());
+ }
+ 
+ void InstructionCodeGeneratorARMVIXL::VisitStaticFieldSet(HStaticFieldSet* instruction) {
+-  HandleFieldSet(instruction, instruction->GetFieldInfo(), instruction->GetValueCanBeNull());
++  HandleFieldSet(instruction,
++                 instruction->GetFieldInfo(),
++                 instruction->GetValueCanBeNull(),
++                 instruction->GetWriteBarrierKind());
+ }
+ 
+ void LocationsBuilderARMVIXL::VisitStringBuilderAppend(HStringBuilderAppend* instruction) {
+@@ -6688,8 +6706,10 @@ void LocationsBuilderARMVIXL::VisitArraySet(HArraySet* instruction) {
+     locations->SetInAt(2, Location::RequiresRegister());
+   }
+   if (needs_write_barrier) {
+-    // Temporary registers for the write barrier.
+-    locations->AddTemp(Location::RequiresRegister());  // Possibly used for ref. poisoning too.
++    // Temporary registers for the write barrier or register poisoning.
++    // TODO(solanes): We could reduce the temp usage but it requires some non-trivial refactoring of
++    // InstructionCodeGeneratorARMVIXL::VisitArraySet.
++    locations->AddTemp(Location::RequiresRegister());
+     locations->AddTemp(Location::RequiresRegister());
+   }
+ }
+@@ -6841,7 +6861,11 @@ void InstructionCodeGeneratorARMVIXL::VisitArraySet(HArraySet* instruction) {
+         }
+       }
+ 
+-      codegen_->MarkGCCard(temp1, temp2, array, value, /* value_can_be_null= */ false);
++      if (instruction->GetWriteBarrierKind() != WriteBarrierKind::kDontEmit) {
++        DCHECK_EQ(instruction->GetWriteBarrierKind(), WriteBarrierKind::kEmitNoNullCheck)
++            << " Already null checked so we shouldn't do it again.";
++        codegen_->MarkGCCard(temp1, temp2, array, value, /* emit_null_check= */ false);
++      }
+ 
+       if (can_value_be_null) {
+         DCHECK(do_store.IsReferenced());
+@@ -7072,9 +7096,9 @@ void CodeGeneratorARMVIXL::MarkGCCard(vixl32::Register temp,
+                                       vixl32::Register card,
+                                       vixl32::Register object,
+                                       vixl32::Register value,
+-                                      bool value_can_be_null) {
++                                      bool emit_null_check) {
+   vixl32::Label is_null;
+-  if (value_can_be_null) {
++  if (emit_null_check) {
+     __ CompareAndBranchIfZero(value, &is_null, /* is_far_target=*/ false);
+   }
+   // Load the address of the card table into `card`.
+@@ -7097,7 +7121,7 @@ void CodeGeneratorARMVIXL::MarkGCCard(vixl32::Register temp,
+   // of the card to mark; and 2. to load the `kCardDirty` value) saves a load
+   // (no need to explicitly load `kCardDirty` as an immediate value).
+   __ Strb(card, MemOperand(card, temp));
+-  if (value_can_be_null) {
++  if (emit_null_check) {
+     __ Bind(&is_null);
+   }
+ }
+diff --git a/compiler/optimizing/code_generator_arm_vixl.h b/compiler/optimizing/code_generator_arm_vixl.h
+index 790ad0f8f7..8c37e57672 100644
+--- a/compiler/optimizing/code_generator_arm_vixl.h
++++ b/compiler/optimizing/code_generator_arm_vixl.h
+@@ -309,7 +309,9 @@ class LocationsBuilderARMVIXL : public HGraphVisitor {
+   void HandleIntegerRotate(LocationSummary* locations);
+   void HandleLongRotate(LocationSummary* locations);
+   void HandleShift(HBinaryOperation* operation);
+-  void HandleFieldSet(HInstruction* instruction, const FieldInfo& field_info);
++  void HandleFieldSet(HInstruction* instruction,
++                      const FieldInfo& field_info,
++                      WriteBarrierKind write_barrier_kind);
+   void HandleFieldGet(HInstruction* instruction, const FieldInfo& field_info);
+ 
+   Location ArithmeticZeroOrFpuRegister(HInstruction* input);
+@@ -378,7 +380,8 @@ class InstructionCodeGeneratorARMVIXL : public InstructionCodeGenerator {
+ 
+   void HandleFieldSet(HInstruction* instruction,
+                       const FieldInfo& field_info,
+-                      bool value_can_be_null);
++                      bool value_can_be_null,
++                      WriteBarrierKind write_barrier_kind);
+   void HandleFieldGet(HInstruction* instruction, const FieldInfo& field_info);
+ 
+   void GenerateMinMaxInt(LocationSummary* locations, bool is_min);
+@@ -542,7 +545,7 @@ class CodeGeneratorARMVIXL : public CodeGenerator {
+                   vixl::aarch32::Register card,
+                   vixl::aarch32::Register object,
+                   vixl::aarch32::Register value,
+-                  bool value_can_be_null);
++                  bool emit_null_check);
+ 
+   void GenerateMemoryBarrier(MemBarrierKind kind);
+ 
+diff --git a/compiler/optimizing/code_generator_x86.cc b/compiler/optimizing/code_generator_x86.cc
+index 8c6b8027cd..3534ad47e8 100644
+--- a/compiler/optimizing/code_generator_x86.cc
++++ b/compiler/optimizing/code_generator_x86.cc
+@@ -36,6 +36,7 @@
+ #include "mirror/array-inl.h"
+ #include "mirror/class-inl.h"
+ #include "mirror/var_handle.h"
++#include "optimizing/nodes.h"
+ #include "scoped_thread_state_change-inl.h"
+ #include "thread.h"
+ #include "utils/assembler.h"
+@@ -5689,13 +5690,10 @@ void CodeGeneratorX86::EmitLinkerPatches(ArenaVector<linker::LinkerPatch>* linke
+   DCHECK_EQ(size, linker_patches->size());
+ }
+ 
+-void CodeGeneratorX86::MarkGCCard(Register temp,
+-                                  Register card,
+-                                  Register object,
+-                                  Register value,
+-                                  bool value_can_be_null) {
++void CodeGeneratorX86::MarkGCCard(
++    Register temp, Register card, Register object, Register value, bool emit_null_check) {
+   NearLabel is_null;
+-  if (value_can_be_null) {
++  if (emit_null_check) {
+     __ testl(value, value);
+     __ j(kEqual, &is_null);
+   }
+@@ -5720,7 +5718,7 @@ void CodeGeneratorX86::MarkGCCard(Register temp,
+   // (no need to explicitly load `kCardDirty` as an immediate value).
+   __ movb(Address(temp, card, TIMES_1, 0),
+           X86ManagedRegister::FromCpuRegister(card).AsByteRegister());
+-  if (value_can_be_null) {
++  if (emit_null_check) {
+     __ Bind(&is_null);
+   }
+ }
+@@ -5824,7 +5822,9 @@ void InstructionCodeGeneratorX86::HandleFieldGet(HInstruction* instruction,
+   }
+ }
+ 
+-void LocationsBuilderX86::HandleFieldSet(HInstruction* instruction, const FieldInfo& field_info) {
++void LocationsBuilderX86::HandleFieldSet(HInstruction* instruction,
++                                         const FieldInfo& field_info,
++                                         WriteBarrierKind write_barrier_kind) {
+   DCHECK(instruction->IsInstanceFieldSet() || instruction->IsStaticFieldSet());
+ 
+   LocationSummary* locations =
+@@ -5861,10 +5861,13 @@ void LocationsBuilderX86::HandleFieldSet(HInstruction* instruction, const FieldI
+     locations->SetInAt(1, Location::RegisterOrConstant(instruction->InputAt(1)));
+ 
+     if (CodeGenerator::StoreNeedsWriteBarrier(field_type, instruction->InputAt(1))) {
+-      // Temporary registers for the write barrier.
+-      locations->AddTemp(Location::RequiresRegister());  // May be used for reference poisoning too.
+-      // Ensure the card is in a byte register.
+-      locations->AddTemp(Location::RegisterLocation(ECX));
++      if (write_barrier_kind != WriteBarrierKind::kDontEmit) {
++        locations->AddTemp(Location::RequiresRegister());
++        // Ensure the card is in a byte register.
++        locations->AddTemp(Location::RegisterLocation(ECX));
++      } else if (kPoisonHeapReferences) {
++        locations->AddTemp(Location::RequiresRegister());
++      }
+     }
+   }
+ }
+@@ -5875,7 +5878,8 @@ void InstructionCodeGeneratorX86::HandleFieldSet(HInstruction* instruction,
+                                                  Address field_addr,
+                                                  Register base,
+                                                  bool is_volatile,
+-                                                 bool value_can_be_null) {
++                                                 bool value_can_be_null,
++                                                 WriteBarrierKind write_barrier_kind) {
+   LocationSummary* locations = instruction->GetLocations();
+   Location value = locations->InAt(value_index);
+   bool needs_write_barrier =
+@@ -5988,10 +5992,15 @@ void InstructionCodeGeneratorX86::HandleFieldSet(HInstruction* instruction,
+     codegen_->MaybeRecordImplicitNullCheck(instruction);
+   }
+ 
+-  if (needs_write_barrier) {
++  if (needs_write_barrier && write_barrier_kind != WriteBarrierKind::kDontEmit) {
+     Register temp = locations->GetTemp(0).AsRegister<Register>();
+     Register card = locations->GetTemp(1).AsRegister<Register>();
+-    codegen_->MarkGCCard(temp, card, base, value.AsRegister<Register>(), value_can_be_null);
++    codegen_->MarkGCCard(
++        temp,
++        card,
++        base,
++        value.AsRegister<Register>(),
++        value_can_be_null && write_barrier_kind == WriteBarrierKind::kEmitWithNullCheck);
+   }
+ 
+   if (is_volatile) {
+@@ -6001,7 +6010,8 @@ void InstructionCodeGeneratorX86::HandleFieldSet(HInstruction* instruction,
+ 
+ void InstructionCodeGeneratorX86::HandleFieldSet(HInstruction* instruction,
+                                                  const FieldInfo& field_info,
+-                                                 bool value_can_be_null) {
++                                                 bool value_can_be_null,
++                                                 WriteBarrierKind write_barrier_kind) {
+   DCHECK(instruction->IsInstanceFieldSet() || instruction->IsStaticFieldSet());
+ 
+   LocationSummary* locations = instruction->GetLocations();
+@@ -6026,7 +6036,8 @@ void InstructionCodeGeneratorX86::HandleFieldSet(HInstruction* instruction,
+                  field_addr,
+                  base,
+                  is_volatile,
+-                 value_can_be_null);
++                 value_can_be_null,
++                 write_barrier_kind);
+ 
+   if (is_predicated) {
+     __ Bind(&pred_is_null);
+@@ -6042,19 +6053,25 @@ void InstructionCodeGeneratorX86::VisitStaticFieldGet(HStaticFieldGet* instructi
+ }
+ 
+ void LocationsBuilderX86::VisitStaticFieldSet(HStaticFieldSet* instruction) {
+-  HandleFieldSet(instruction, instruction->GetFieldInfo());
++  HandleFieldSet(instruction, instruction->GetFieldInfo(), instruction->GetWriteBarrierKind());
+ }
+ 
+ void InstructionCodeGeneratorX86::VisitStaticFieldSet(HStaticFieldSet* instruction) {
+-  HandleFieldSet(instruction, instruction->GetFieldInfo(), instruction->GetValueCanBeNull());
++  HandleFieldSet(instruction,
++                 instruction->GetFieldInfo(),
++                 instruction->GetValueCanBeNull(),
++                 instruction->GetWriteBarrierKind());
+ }
+ 
+ void LocationsBuilderX86::VisitInstanceFieldSet(HInstanceFieldSet* instruction) {
+-  HandleFieldSet(instruction, instruction->GetFieldInfo());
++  HandleFieldSet(instruction, instruction->GetFieldInfo(), instruction->GetWriteBarrierKind());
+ }
+ 
+ void InstructionCodeGeneratorX86::VisitInstanceFieldSet(HInstanceFieldSet* instruction) {
+-  HandleFieldSet(instruction, instruction->GetFieldInfo(), instruction->GetValueCanBeNull());
++  HandleFieldSet(instruction,
++                 instruction->GetFieldInfo(),
++                 instruction->GetValueCanBeNull(),
++                 instruction->GetWriteBarrierKind());
+ }
+ 
+ void LocationsBuilderX86::VisitPredicatedInstanceFieldGet(
+@@ -6315,10 +6332,12 @@ void LocationsBuilderX86::VisitArraySet(HArraySet* instruction) {
+     locations->SetInAt(2, Location::RegisterOrConstant(instruction->InputAt(2)));
+   }
+   if (needs_write_barrier) {
+-    // Temporary registers for the write barrier.
+-    locations->AddTemp(Location::RequiresRegister());  // Possibly used for ref. poisoning too.
+-    // Ensure the card is in a byte register.
+-    locations->AddTemp(Location::RegisterLocation(ECX));
++    // Used by reference poisoning or emitting write barrier.
++    locations->AddTemp(Location::RequiresRegister());
++    if (instruction->GetWriteBarrierKind() != WriteBarrierKind::kDontEmit) {
++      // Only used when emitting a write barrier. Ensure the card is in a byte register.
++      locations->AddTemp(Location::RegisterLocation(ECX));
++    }
+   }
+ }
+ 
+@@ -6435,9 +6454,16 @@ void InstructionCodeGeneratorX86::VisitArraySet(HArraySet* instruction) {
+         }
+       }
+ 
+-      Register card = locations->GetTemp(1).AsRegister<Register>();
+-      codegen_->MarkGCCard(
+-          temp, card, array, value.AsRegister<Register>(), /* value_can_be_null= */ false);
++      if (instruction->GetWriteBarrierKind() != WriteBarrierKind::kDontEmit) {
++        DCHECK_EQ(instruction->GetWriteBarrierKind(), WriteBarrierKind::kEmitNoNullCheck)
++            << " Already null checked so we shouldn't do it again.";
++        Register card = locations->GetTemp(1).AsRegister<Register>();
++        codegen_->MarkGCCard(temp,
++                             card,
++                             array,
++                             value.AsRegister<Register>(),
++                             /* emit_null_check= */ false);
++      }
+ 
+       if (can_value_be_null) {
+         DCHECK(do_store.IsLinked());
+diff --git a/compiler/optimizing/code_generator_x86.h b/compiler/optimizing/code_generator_x86.h
+index 75c5cebb5e..8b830d4dda 100644
+--- a/compiler/optimizing/code_generator_x86.h
++++ b/compiler/optimizing/code_generator_x86.h
+@@ -196,7 +196,9 @@ class LocationsBuilderX86 : public HGraphVisitor {
+   void HandleInvoke(HInvoke* invoke);
+   void HandleCondition(HCondition* condition);
+   void HandleShift(HBinaryOperation* instruction);
+-  void HandleFieldSet(HInstruction* instruction, const FieldInfo& field_info);
++  void HandleFieldSet(HInstruction* instruction,
++                      const FieldInfo& field_info,
++                      WriteBarrierKind write_barrier_kind);
+   void HandleFieldGet(HInstruction* instruction, const FieldInfo& field_info);
+   bool CpuHasAvxFeatureFlag();
+   bool CpuHasAvx2FeatureFlag();
+@@ -249,7 +251,8 @@ class InstructionCodeGeneratorX86 : public InstructionCodeGenerator {
+                       Address field_addr,
+                       Register base,
+                       bool is_volatile,
+-                      bool value_can_be_null);
++                      bool value_can_be_null,
++                      WriteBarrierKind write_barrier_kind);
+ 
+  private:
+   // Generate code for the given suspend check. If not null, `successor`
+@@ -279,7 +282,8 @@ class InstructionCodeGeneratorX86 : public InstructionCodeGenerator {
+ 
+   void HandleFieldSet(HInstruction* instruction,
+                       const FieldInfo& field_info,
+-                      bool value_can_be_null);
++                      bool value_can_be_null,
++                      WriteBarrierKind write_barrier_kind);
+   void HandleFieldGet(HInstruction* instruction, const FieldInfo& field_info);
+ 
+   // Generate a heap reference load using one register `out`:
+@@ -519,11 +523,8 @@ class CodeGeneratorX86 : public CodeGenerator {
+   void EmitJitRootPatches(uint8_t* code, const uint8_t* roots_data) override;
+ 
+   // Emit a write barrier.
+-  void MarkGCCard(Register temp,
+-                  Register card,
+-                  Register object,
+-                  Register value,
+-                  bool value_can_be_null);
++  void MarkGCCard(
++      Register temp, Register card, Register object, Register value, bool emit_null_check);
+ 
+   void GenerateMemoryBarrier(MemBarrierKind kind);
+ 
+diff --git a/compiler/optimizing/code_generator_x86_64.cc b/compiler/optimizing/code_generator_x86_64.cc
+index 511917a735..39a69acd30 100644
+--- a/compiler/optimizing/code_generator_x86_64.cc
++++ b/compiler/optimizing/code_generator_x86_64.cc
+@@ -37,6 +37,7 @@
+ #include "mirror/class-inl.h"
+ #include "mirror/object_reference.h"
+ #include "mirror/var_handle.h"
++#include "optimizing/nodes.h"
+ #include "scoped_thread_state_change-inl.h"
+ #include "thread.h"
+ #include "utils/assembler.h"
+@@ -5119,6 +5120,9 @@ void LocationsBuilderX86_64::HandleFieldSet(HInstruction* instruction,
+       locations->SetInAt(1, Location::RegisterOrConstant(instruction->InputAt(1)));
+     }
+   }
++
++  // TODO(solanes): We could reduce the temp usage but it requires some non-trivial refactoring of
++  // InstructionCodeGeneratorX86_64::HandleFieldSet.
+   if (needs_write_barrier) {
+     // Temporary registers for the write barrier.
+     locations->AddTemp(Location::RequiresRegister());
+@@ -5180,7 +5184,8 @@ void InstructionCodeGeneratorX86_64::HandleFieldSet(HInstruction* instruction,
+                                                     bool is_volatile,
+                                                     bool is_atomic,
+                                                     bool value_can_be_null,
+-                                                    bool byte_swap) {
++                                                    bool byte_swap,
++                                                    WriteBarrierKind write_barrier_kind) {
+   LocationSummary* locations = instruction->GetLocations();
+   Location value = locations->InAt(value_index);
+ 
+@@ -5298,10 +5303,16 @@ void InstructionCodeGeneratorX86_64::HandleFieldSet(HInstruction* instruction,
+     codegen_->MaybeRecordImplicitNullCheck(instruction);
+   }
+ 
+-  if (CodeGenerator::StoreNeedsWriteBarrier(field_type, instruction->InputAt(value_index))) {
++  if (CodeGenerator::StoreNeedsWriteBarrier(field_type, instruction->InputAt(value_index)) &&
++      write_barrier_kind != WriteBarrierKind::kDontEmit) {
+     CpuRegister temp = locations->GetTemp(0).AsRegister<CpuRegister>();
+     CpuRegister card = locations->GetTemp(extra_temp_index).AsRegister<CpuRegister>();
+-    codegen_->MarkGCCard(temp, card, base, value.AsRegister<CpuRegister>(), value_can_be_null);
++    codegen_->MarkGCCard(
++        temp,
++        card,
++        base,
++        value.AsRegister<CpuRegister>(),
++        value_can_be_null && write_barrier_kind == WriteBarrierKind::kEmitWithNullCheck);
+   }
+ 
+   if (is_volatile) {
+@@ -5311,7 +5322,8 @@ void InstructionCodeGeneratorX86_64::HandleFieldSet(HInstruction* instruction,
+ 
+ void InstructionCodeGeneratorX86_64::HandleFieldSet(HInstruction* instruction,
+                                                     const FieldInfo& field_info,
+-                                                    bool value_can_be_null) {
++                                                    bool value_can_be_null,
++                                                    WriteBarrierKind write_barrier_kind) {
+   DCHECK(instruction->IsInstanceFieldSet() || instruction->IsStaticFieldSet());
+ 
+   LocationSummary* locations = instruction->GetLocations();
+@@ -5336,7 +5348,9 @@ void InstructionCodeGeneratorX86_64::HandleFieldSet(HInstruction* instruction,
+                  base,
+                  is_volatile,
+                  /*is_atomic=*/ false,
+-                 value_can_be_null);
++                 value_can_be_null,
++                 /*byte_swap=*/ false,
++                 write_barrier_kind);
+ 
+   if (is_predicated) {
+     __ Bind(&pred_is_null);
+@@ -5348,7 +5362,10 @@ void LocationsBuilderX86_64::VisitInstanceFieldSet(HInstanceFieldSet* instructio
+ }
+ 
+ void InstructionCodeGeneratorX86_64::VisitInstanceFieldSet(HInstanceFieldSet* instruction) {
+-  HandleFieldSet(instruction, instruction->GetFieldInfo(), instruction->GetValueCanBeNull());
++  HandleFieldSet(instruction,
++                 instruction->GetFieldInfo(),
++                 instruction->GetValueCanBeNull(),
++                 instruction->GetWriteBarrierKind());
+ }
+ 
+ void LocationsBuilderX86_64::VisitPredicatedInstanceFieldGet(
+@@ -5388,7 +5405,10 @@ void LocationsBuilderX86_64::VisitStaticFieldSet(HStaticFieldSet* instruction) {
+ }
+ 
+ void InstructionCodeGeneratorX86_64::VisitStaticFieldSet(HStaticFieldSet* instruction) {
+-  HandleFieldSet(instruction, instruction->GetFieldInfo(), instruction->GetValueCanBeNull());
++  HandleFieldSet(instruction,
++                 instruction->GetFieldInfo(),
++                 instruction->GetValueCanBeNull(),
++                 instruction->GetWriteBarrierKind());
+ }
+ 
+ void LocationsBuilderX86_64::VisitStringBuilderAppend(HStringBuilderAppend* instruction) {
+@@ -5619,9 +5639,12 @@ void LocationsBuilderX86_64::VisitArraySet(HArraySet* instruction) {
+   }
+ 
+   if (needs_write_barrier) {
+-    // Temporary registers for the write barrier.
+-    locations->AddTemp(Location::RequiresRegister());  // Possibly used for ref. poisoning too.
++    // Used by reference poisoning or emitting write barrier.
+     locations->AddTemp(Location::RequiresRegister());
++    if (instruction->GetWriteBarrierKind() != WriteBarrierKind::kDontEmit) {
++      // Only used when emitting a write barrier.
++      locations->AddTemp(Location::RequiresRegister());
++    }
+   }
+ }
+ 
+@@ -5739,9 +5762,16 @@ void InstructionCodeGeneratorX86_64::VisitArraySet(HArraySet* instruction) {
+         }
+       }
+ 
+-      CpuRegister card = locations->GetTemp(1).AsRegister<CpuRegister>();
+-      codegen_->MarkGCCard(
+-          temp, card, array, value.AsRegister<CpuRegister>(), /* value_can_be_null= */ false);
++      if (instruction->GetWriteBarrierKind() != WriteBarrierKind::kDontEmit) {
++        DCHECK_EQ(instruction->GetWriteBarrierKind(), WriteBarrierKind::kEmitNoNullCheck)
++            << " Already null checked so we shouldn't do it again.";
++        CpuRegister card = locations->GetTemp(1).AsRegister<CpuRegister>();
++        codegen_->MarkGCCard(temp,
++                             card,
++                             array,
++                             value.AsRegister<CpuRegister>(),
++                             /* emit_null_check= */ false);
++      }
+ 
+       if (can_value_be_null) {
+         DCHECK(do_store.IsLinked());
+@@ -5940,9 +5970,9 @@ void CodeGeneratorX86_64::MarkGCCard(CpuRegister temp,
+                                      CpuRegister card,
+                                      CpuRegister object,
+                                      CpuRegister value,
+-                                     bool value_can_be_null) {
++                                     bool emit_null_check) {
+   NearLabel is_null;
+-  if (value_can_be_null) {
++  if (emit_null_check) {
+     __ testl(value, value);
+     __ j(kEqual, &is_null);
+   }
+@@ -5967,7 +5997,7 @@ void CodeGeneratorX86_64::MarkGCCard(CpuRegister temp,
+   // of the card to mark; and 2. to load the `kCardDirty` value) saves a load
+   // (no need to explicitly load `kCardDirty` as an immediate value).
+   __ movb(Address(temp, card, TIMES_1, 0), card);
+-  if (value_can_be_null) {
++  if (emit_null_check) {
+     __ Bind(&is_null);
+   }
+ }
+diff --git a/compiler/optimizing/code_generator_x86_64.h b/compiler/optimizing/code_generator_x86_64.h
+index 39a72d8211..44fa161804 100644
+--- a/compiler/optimizing/code_generator_x86_64.h
++++ b/compiler/optimizing/code_generator_x86_64.h
+@@ -250,7 +250,8 @@ class InstructionCodeGeneratorX86_64 : public InstructionCodeGenerator {
+                       bool is_volatile,
+                       bool is_atomic,
+                       bool value_can_be_null,
+-                      bool byte_swap = false);
++                      bool byte_swap,
++                      WriteBarrierKind write_barrier_kind);
+ 
+   void Bswap(Location value, DataType::Type type, CpuRegister* temp = nullptr);
+ 
+@@ -273,7 +274,8 @@ class InstructionCodeGeneratorX86_64 : public InstructionCodeGenerator {
+ 
+   void HandleFieldSet(HInstruction* instruction,
+                       const FieldInfo& field_info,
+-                      bool value_can_be_null);
++                      bool value_can_be_null,
++                      WriteBarrierKind write_barrier_kind);
+   void HandleFieldGet(HInstruction* instruction, const FieldInfo& field_info);
+ 
+   void GenerateMinMaxInt(LocationSummary* locations, bool is_min, DataType::Type type);
+@@ -435,7 +437,7 @@ class CodeGeneratorX86_64 : public CodeGenerator {
+                   CpuRegister card,
+                   CpuRegister object,
+                   CpuRegister value,
+-                  bool value_can_be_null);
++                  bool emit_null_check);
+ 
+   void GenerateMemoryBarrier(MemBarrierKind kind);
+ 
+diff --git a/compiler/optimizing/graph_visualizer.cc b/compiler/optimizing/graph_visualizer.cc
+index 4f81631c67..9cce31d3b4 100644
+--- a/compiler/optimizing/graph_visualizer.cc
++++ b/compiler/optimizing/graph_visualizer.cc
+@@ -480,6 +480,7 @@ class HGraphVisualizerPrinter : public HGraphDelegateVisitor {
+         << array_set->GetValueCanBeNull() << std::noboolalpha;
+     StartAttributeStream("needs_type_check") << std::boolalpha
+         << array_set->NeedsTypeCheck() << std::noboolalpha;
++    StartAttributeStream("write_barrier_kind") << array_set->GetWriteBarrierKind();
+   }
+ 
+   void VisitCompare(HCompare* compare) override {
+@@ -549,7 +550,9 @@ class HGraphVisualizerPrinter : public HGraphDelegateVisitor {
+         iset->GetFieldInfo().GetDexFile().PrettyField(iset->GetFieldInfo().GetFieldIndex(),
+                                                       /* with type */ false);
+     StartAttributeStream("field_type") << iset->GetFieldType();
+-    StartAttributeStream("predicated") << std::boolalpha << iset->GetIsPredicatedSet();
++    StartAttributeStream("predicated")
++        << std::boolalpha << iset->GetIsPredicatedSet() << std::noboolalpha;
++    StartAttributeStream("write_barrier_kind") << iset->GetWriteBarrierKind();
+   }
+ 
+   void VisitStaticFieldGet(HStaticFieldGet* sget) override {
+@@ -564,6 +567,7 @@ class HGraphVisualizerPrinter : public HGraphDelegateVisitor {
+         sset->GetFieldInfo().GetDexFile().PrettyField(sset->GetFieldInfo().GetFieldIndex(),
+                                                       /* with type */ false);
+     StartAttributeStream("field_type") << sset->GetFieldType();
++    StartAttributeStream("write_barrier_kind") << sset->GetWriteBarrierKind();
+   }
+ 
+   void VisitUnresolvedInstanceFieldGet(HUnresolvedInstanceFieldGet* field_access) override {
+diff --git a/compiler/optimizing/intrinsics_x86.cc b/compiler/optimizing/intrinsics_x86.cc
+index 7d90aae984..e74c52d475 100644
+--- a/compiler/optimizing/intrinsics_x86.cc
++++ b/compiler/optimizing/intrinsics_x86.cc
+@@ -4041,13 +4041,16 @@ static void GenerateVarHandleSet(HInvoke* invoke, CodeGeneratorX86* codegen) {
+   InstructionCodeGeneratorX86* instr_codegen =
+         down_cast<InstructionCodeGeneratorX86*>(codegen->GetInstructionVisitor());
+   // Store the value to the field
+-  instr_codegen->HandleFieldSet(invoke,
+-                                value_index,
+-                                value_type,
+-                                Address(reference, offset, TIMES_1, 0),
+-                                reference,
+-                                is_volatile,
+-                                /* value_can_be_null */ true);
++  instr_codegen->HandleFieldSet(
++      invoke,
++      value_index,
++      value_type,
++      Address(reference, offset, TIMES_1, 0),
++      reference,
++      is_volatile,
++      /* value_can_be_null */ true,
++      // Value can be null, and this write barrier is not being relied on for other sets.
++      WriteBarrierKind::kEmitWithNullCheck);
+ 
+   __ Bind(slow_path->GetExitLabel());
+ }
+diff --git a/compiler/optimizing/intrinsics_x86_64.cc b/compiler/optimizing/intrinsics_x86_64.cc
+index 3c31374f67..2d9978e740 100644
+--- a/compiler/optimizing/intrinsics_x86_64.cc
++++ b/compiler/optimizing/intrinsics_x86_64.cc
+@@ -3985,16 +3985,19 @@ static void GenerateVarHandleSet(HInvoke* invoke,
+   Address dst(CpuRegister(target.object), CpuRegister(target.offset), TIMES_1, 0);
+ 
+   // Store the value to the field.
+-  codegen->GetInstructionCodegen()->HandleFieldSet(invoke,
+-                                                   value_index,
+-                                                   last_temp_index,
+-                                                   value_type,
+-                                                   dst,
+-                                                   CpuRegister(target.object),
+-                                                   is_volatile,
+-                                                   is_atomic,
+-                                                   /*value_can_be_null=*/ true,
+-                                                   byte_swap);
++  codegen->GetInstructionCodegen()->HandleFieldSet(
++      invoke,
++      value_index,
++      last_temp_index,
++      value_type,
++      dst,
++      CpuRegister(target.object),
++      is_volatile,
++      is_atomic,
++      /*value_can_be_null=*/true,
++      byte_swap,
++      // Value can be null, and this write barrier is not being relied on for other sets.
++      WriteBarrierKind::kEmitWithNullCheck);
+ 
+   // setVolatile needs kAnyAny barrier, but HandleFieldSet takes care of that.
+ 
+diff --git a/compiler/optimizing/nodes.h b/compiler/optimizing/nodes.h
+index a56dfd5f26..cebcff732b 100644
+--- a/compiler/optimizing/nodes.h
++++ b/compiler/optimizing/nodes.h
+@@ -6362,6 +6362,27 @@ class HPredicatedInstanceFieldGet final : public HExpression<2> {
+   const FieldInfo field_info_;
+ };
+ 
++enum class WriteBarrierKind {
++  // Emit the write barrier, with a runtime optimization which checks if the value that it is being
++  // set is null.
++  kEmitWithNullCheck,
++  // Emit the write barrier, without the runtime null check optimization. This could be set because:
++  //  A) It is a write barrier for an ArraySet (which does the optimization with the type check, so
++  //  it never does the optimization at the write barrier stage)
++  //  B) We know that the input can't be null
++  //  C) This write barrier is actually several write barriers coalesced into one. Potentially we
++  //  could ask if every value is null for a runtime optimization at the cost of compile time / code
++  //  size. At the time of writing it was deemed not worth the effort.
++  kEmitNoNullCheck,
++  // Skip emitting the write barrier. This could be set because:
++  //  A) The write barrier is not needed (e.g. it is not a reference, or the value is the null
++  //  constant)
++  //  B) This write barrier was coalesced into another one so there's no need to emit it.
++  kDontEmit,
++  kLast = kDontEmit
++};
++std::ostream& operator<<(std::ostream& os, WriteBarrierKind rhs);
++
+ class HInstanceFieldSet final : public HExpression<2> {
+  public:
+   HInstanceFieldSet(HInstruction* object,
+@@ -6386,6 +6407,7 @@ class HInstanceFieldSet final : public HExpression<2> {
+                     dex_file) {
+     SetPackedFlag<kFlagValueCanBeNull>(true);
+     SetPackedFlag<kFlagIsPredicatedSet>(false);
++    SetPackedField<WriteBarrierKindField>(WriteBarrierKind::kEmitWithNullCheck);
+     SetRawInputAt(0, object);
+     SetRawInputAt(1, value);
+   }
+@@ -6406,6 +6428,12 @@ class HInstanceFieldSet final : public HExpression<2> {
+   void ClearValueCanBeNull() { SetPackedFlag<kFlagValueCanBeNull>(false); }
+   bool GetIsPredicatedSet() const { return GetPackedFlag<kFlagIsPredicatedSet>(); }
+   void SetIsPredicatedSet(bool value = true) { SetPackedFlag<kFlagIsPredicatedSet>(value); }
++  WriteBarrierKind GetWriteBarrierKind() { return GetPackedField<WriteBarrierKindField>(); }
++  void SetWriteBarrierKind(WriteBarrierKind kind) {
++    DCHECK(kind != WriteBarrierKind::kEmitWithNullCheck)
++        << "We shouldn't go back to the original value.";
++    SetPackedField<WriteBarrierKindField>(kind);
++  }
+ 
+   DECLARE_INSTRUCTION(InstanceFieldSet);
+ 
+@@ -6415,11 +6443,17 @@ class HInstanceFieldSet final : public HExpression<2> {
+  private:
+   static constexpr size_t kFlagValueCanBeNull = kNumberOfGenericPackedBits;
+   static constexpr size_t kFlagIsPredicatedSet = kFlagValueCanBeNull + 1;
+-  static constexpr size_t kNumberOfInstanceFieldSetPackedBits = kFlagIsPredicatedSet + 1;
++  static constexpr size_t kWriteBarrierKind = kFlagIsPredicatedSet + 1;
++  static constexpr size_t kWriteBarrierKindSize =
++      MinimumBitsToStore(static_cast<size_t>(WriteBarrierKind::kLast));
++  static constexpr size_t kNumberOfInstanceFieldSetPackedBits =
++      kWriteBarrierKind + kWriteBarrierKindSize;
+   static_assert(kNumberOfInstanceFieldSetPackedBits <= kMaxNumberOfPackedBits,
+                 "Too many packed fields.");
+ 
+   const FieldInfo field_info_;
++  using WriteBarrierKindField =
++      BitField<WriteBarrierKind, kWriteBarrierKind, kWriteBarrierKindSize>;
+ };
+ 
+ class HArrayGet final : public HExpression<2> {
+@@ -6540,6 +6574,8 @@ class HArraySet final : public HExpression<3> {
+     SetPackedFlag<kFlagNeedsTypeCheck>(value->GetType() == DataType::Type::kReference);
+     SetPackedFlag<kFlagValueCanBeNull>(true);
+     SetPackedFlag<kFlagStaticTypeOfArrayIsObjectArray>(false);
++    // ArraySets never do the null check optimization at the write barrier stage.
++    SetPackedField<WriteBarrierKindField>(WriteBarrierKind::kEmitNoNullCheck);
+     SetRawInputAt(0, array);
+     SetRawInputAt(1, index);
+     SetRawInputAt(2, value);
+@@ -6610,6 +6646,16 @@ class HArraySet final : public HExpression<3> {
+                                                       : SideEffects::None();
+   }
+ 
++  WriteBarrierKind GetWriteBarrierKind() { return GetPackedField<WriteBarrierKindField>(); }
++
++  void SetWriteBarrierKind(WriteBarrierKind kind) {
++    DCHECK(kind != WriteBarrierKind::kEmitNoNullCheck)
++        << "We shouldn't go back to the original value.";
++    DCHECK(kind != WriteBarrierKind::kEmitWithNullCheck)
++        << "We never do the null check optimization for ArraySets.";
++    SetPackedField<WriteBarrierKindField>(kind);
++  }
++
+   DECLARE_INSTRUCTION(ArraySet);
+ 
+  protected:
+@@ -6625,11 +6671,16 @@ class HArraySet final : public HExpression<3> {
+   // Cached information for the reference_type_info_ so that codegen
+   // does not need to inspect the static type.
+   static constexpr size_t kFlagStaticTypeOfArrayIsObjectArray = kFlagValueCanBeNull + 1;
+-  static constexpr size_t kNumberOfArraySetPackedBits =
+-      kFlagStaticTypeOfArrayIsObjectArray + 1;
++  static constexpr size_t kWriteBarrierKind = kFlagStaticTypeOfArrayIsObjectArray + 1;
++  static constexpr size_t kWriteBarrierKindSize =
++      MinimumBitsToStore(static_cast<size_t>(WriteBarrierKind::kLast));
++  static constexpr size_t kNumberOfArraySetPackedBits = kWriteBarrierKind + kWriteBarrierKindSize;
+   static_assert(kNumberOfArraySetPackedBits <= kMaxNumberOfPackedBits, "Too many packed fields.");
+   using ExpectedComponentTypeField =
+       BitField<DataType::Type, kFieldExpectedComponentType, kFieldExpectedComponentTypeSize>;
++
++  using WriteBarrierKindField =
++      BitField<WriteBarrierKind, kWriteBarrierKind, kWriteBarrierKindSize>;
+ };
+ 
+ class HArrayLength final : public HExpression<1> {
+@@ -7408,6 +7459,7 @@ class HStaticFieldSet final : public HExpression<2> {
+                     declaring_class_def_index,
+                     dex_file) {
+     SetPackedFlag<kFlagValueCanBeNull>(true);
++    SetPackedField<WriteBarrierKindField>(WriteBarrierKind::kEmitWithNullCheck);
+     SetRawInputAt(0, cls);
+     SetRawInputAt(1, value);
+   }
+@@ -7423,6 +7475,13 @@ class HStaticFieldSet final : public HExpression<2> {
+   bool GetValueCanBeNull() const { return GetPackedFlag<kFlagValueCanBeNull>(); }
+   void ClearValueCanBeNull() { SetPackedFlag<kFlagValueCanBeNull>(false); }
+ 
++  WriteBarrierKind GetWriteBarrierKind() { return GetPackedField<WriteBarrierKindField>(); }
++  void SetWriteBarrierKind(WriteBarrierKind kind) {
++    DCHECK(kind != WriteBarrierKind::kEmitWithNullCheck)
++        << "We shouldn't go back to the original value.";
++    SetPackedField<WriteBarrierKindField>(kind);
++  }
++
+   DECLARE_INSTRUCTION(StaticFieldSet);
+ 
+  protected:
+@@ -7430,11 +7489,17 @@ class HStaticFieldSet final : public HExpression<2> {
+ 
+  private:
+   static constexpr size_t kFlagValueCanBeNull = kNumberOfGenericPackedBits;
+-  static constexpr size_t kNumberOfStaticFieldSetPackedBits = kFlagValueCanBeNull + 1;
++  static constexpr size_t kWriteBarrierKind = kFlagValueCanBeNull + 1;
++  static constexpr size_t kWriteBarrierKindSize =
++      MinimumBitsToStore(static_cast<size_t>(WriteBarrierKind::kLast));
++  static constexpr size_t kNumberOfStaticFieldSetPackedBits =
++      kWriteBarrierKind + kWriteBarrierKindSize;
+   static_assert(kNumberOfStaticFieldSetPackedBits <= kMaxNumberOfPackedBits,
+                 "Too many packed fields.");
+ 
+   const FieldInfo field_info_;
++  using WriteBarrierKindField =
++      BitField<WriteBarrierKind, kWriteBarrierKind, kWriteBarrierKindSize>;
+ };
+ 
+ class HStringBuilderAppend final : public HVariableInputSizeInstruction {
+diff --git a/compiler/optimizing/optimization.cc b/compiler/optimizing/optimization.cc
+index 2cac38b715..9b08d71838 100644
+--- a/compiler/optimizing/optimization.cc
++++ b/compiler/optimizing/optimization.cc
+@@ -55,6 +55,7 @@
+ #include "select_generator.h"
+ #include "sharpening.h"
+ #include "side_effects_analysis.h"
++#include "write_barrier_elimination.h"
+ 
+ // Decide between default or alternative pass name.
+ 
+@@ -95,6 +96,8 @@ const char* OptimizationPassName(OptimizationPass pass) {
+       return ConstructorFenceRedundancyElimination::kCFREPassName;
+     case OptimizationPass::kScheduling:
+       return HInstructionScheduling::kInstructionSchedulingPassName;
++    case OptimizationPass::kWriteBarrierElimination:
++      return WriteBarrierElimination::kWBEPassName;
+ #ifdef ART_ENABLE_CODEGEN_arm
+     case OptimizationPass::kInstructionSimplifierArm:
+       return arm::InstructionSimplifierArm::kInstructionSimplifierArmPassName;
+@@ -267,6 +270,9 @@ ArenaVector<HOptimization*> ConstructOptimizations(
+       case OptimizationPass::kLoadStoreElimination:
+         opt = new (allocator) LoadStoreElimination(graph, stats, pass_name);
+         break;
++      case OptimizationPass::kWriteBarrierElimination:
++        opt = new (allocator) WriteBarrierElimination(graph, stats, pass_name);
++        break;
+       case OptimizationPass::kScheduling:
+         opt = new (allocator) HInstructionScheduling(
+             graph, codegen->GetCompilerOptions().GetInstructionSet(), codegen, pass_name);
+diff --git a/compiler/optimizing/optimization.h b/compiler/optimizing/optimization.h
+index 2113df0c81..31437ee553 100644
+--- a/compiler/optimizing/optimization.h
++++ b/compiler/optimizing/optimization.h
+@@ -83,6 +83,7 @@ enum class OptimizationPass {
+   kScheduling,
+   kSelectGenerator,
+   kSideEffectsAnalysis,
++  kWriteBarrierElimination,
+ #ifdef ART_ENABLE_CODEGEN_arm
+   kInstructionSimplifierArm,
+   kCriticalNativeAbiFixupArm,
+diff --git a/compiler/optimizing/optimizing_compiler.cc b/compiler/optimizing/optimizing_compiler.cc
+index 6eb3d01e42..abd0c8da1f 100644
+--- a/compiler/optimizing/optimizing_compiler.cc
++++ b/compiler/optimizing/optimizing_compiler.cc
+@@ -52,6 +52,7 @@
+ #include "linker/linker_patch.h"
+ #include "nodes.h"
+ #include "oat_quick_method_header.h"
++#include "optimizing/write_barrier_elimination.h"
+ #include "prepare_for_register_allocation.h"
+ #include "reference_type_propagation.h"
+ #include "register_allocator_linear_scan.h"
+@@ -891,6 +892,8 @@ CodeGenerator* OptimizingCompiler::TryCompile(ArenaAllocator* allocator,
+     RunBaselineOptimizations(graph, codegen.get(), dex_compilation_unit, &pass_observer);
+   } else {
+     RunOptimizations(graph, codegen.get(), dex_compilation_unit, &pass_observer);
++    PassScope scope(WriteBarrierElimination::kWBEPassName, &pass_observer);
++    WriteBarrierElimination(graph, compilation_stats_.get()).Run();
+   }
+ 
+   RegisterAllocator::Strategy regalloc_strategy =
+@@ -984,6 +987,10 @@ CodeGenerator* OptimizingCompiler::TryCompileIntrinsic(
+                    optimizations);
+ 
+   RunArchOptimizations(graph, codegen.get(), dex_compilation_unit, &pass_observer);
++  {
++    PassScope scope(WriteBarrierElimination::kWBEPassName, &pass_observer);
++    WriteBarrierElimination(graph, compilation_stats_.get()).Run();
++  }
+ 
+   AllocateRegisters(graph,
+                     codegen.get(),
+diff --git a/compiler/optimizing/optimizing_compiler_stats.h b/compiler/optimizing/optimizing_compiler_stats.h
+index fb30264f16..c770a21b3a 100644
+--- a/compiler/optimizing/optimizing_compiler_stats.h
++++ b/compiler/optimizing/optimizing_compiler_stats.h
+@@ -113,6 +113,8 @@ enum class MethodCompilationStat {
+   kConstructorFenceRemovedLSE,
+   kConstructorFenceRemovedPFRA,
+   kConstructorFenceRemovedCFRE,
++  kPossibleWriteBarrier,
++  kRemovedWriteBarrier,
+   kBitstringTypeCheck,
+   kJitOutOfMemoryForCommit,
+   kFullLSEAllocationRemoved,
+diff --git a/compiler/optimizing/write_barrier_elimination.cc b/compiler/optimizing/write_barrier_elimination.cc
+new file mode 100644
+index 0000000000..9023cc24b7
+--- /dev/null
++++ b/compiler/optimizing/write_barrier_elimination.cc
+@@ -0,0 +1,161 @@
++/*
++ * Copyright (C) 2022 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#include "write_barrier_elimination.h"
++
++#include "base/arena_allocator.h"
++#include "base/scoped_arena_allocator.h"
++#include "base/scoped_arena_containers.h"
++#include "optimizing/nodes.h"
++
++namespace art HIDDEN {
++
++class WBEVisitor : public HGraphVisitor {
++ public:
++  WBEVisitor(HGraph* graph, OptimizingCompilerStats* stats)
++      : HGraphVisitor(graph),
++        scoped_allocator_(graph->GetArenaStack()),
++        current_write_barriers_(scoped_allocator_.Adapter(kArenaAllocWBE)),
++        stats_(stats) {}
++
++  void VisitBasicBlock(HBasicBlock* block) override {
++    // We clear the map to perform this optimization only in the same block. Doing it across blocks
++    // would entail non-trivial merging of states.
++    current_write_barriers_.clear();
++    HGraphVisitor::VisitBasicBlock(block);
++  }
++
++  void VisitInstanceFieldSet(HInstanceFieldSet* instruction) override {
++    DCHECK(!instruction->GetSideEffects().Includes(SideEffects::CanTriggerGC()));
++
++    if (instruction->GetFieldType() != DataType::Type::kReference ||
++        instruction->GetValue()->IsNullConstant()) {
++      instruction->SetWriteBarrierKind(WriteBarrierKind::kDontEmit);
++      return;
++    }
++
++    MaybeRecordStat(stats_, MethodCompilationStat::kPossibleWriteBarrier);
++    HInstruction* obj = HuntForOriginalReference(instruction->InputAt(0));
++    auto it = current_write_barriers_.find(obj);
++    if (it != current_write_barriers_.end()) {
++      DCHECK(it->second->IsInstanceFieldSet());
++      DCHECK(it->second->AsInstanceFieldSet()->GetWriteBarrierKind() !=
++             WriteBarrierKind::kDontEmit);
++      DCHECK_EQ(it->second->GetBlock(), instruction->GetBlock());
++      it->second->AsInstanceFieldSet()->SetWriteBarrierKind(WriteBarrierKind::kEmitNoNullCheck);
++      instruction->SetWriteBarrierKind(WriteBarrierKind::kDontEmit);
++      MaybeRecordStat(stats_, MethodCompilationStat::kRemovedWriteBarrier);
++    } else {
++      const bool inserted = current_write_barriers_.insert({obj, instruction}).second;
++      DCHECK(inserted);
++      DCHECK(instruction->GetWriteBarrierKind() != WriteBarrierKind::kDontEmit);
++    }
++  }
++
++  void VisitStaticFieldSet(HStaticFieldSet* instruction) override {
++    DCHECK(!instruction->GetSideEffects().Includes(SideEffects::CanTriggerGC()));
++
++    if (instruction->GetFieldType() != DataType::Type::kReference ||
++        instruction->GetValue()->IsNullConstant()) {
++      instruction->SetWriteBarrierKind(WriteBarrierKind::kDontEmit);
++      return;
++    }
++
++    MaybeRecordStat(stats_, MethodCompilationStat::kPossibleWriteBarrier);
++    HInstruction* cls = HuntForOriginalReference(instruction->InputAt(0));
++    auto it = current_write_barriers_.find(cls);
++    if (it != current_write_barriers_.end()) {
++      DCHECK(it->second->IsStaticFieldSet());
++      DCHECK(it->second->AsStaticFieldSet()->GetWriteBarrierKind() != WriteBarrierKind::kDontEmit);
++      DCHECK_EQ(it->second->GetBlock(), instruction->GetBlock());
++      it->second->AsStaticFieldSet()->SetWriteBarrierKind(WriteBarrierKind::kEmitNoNullCheck);
++      instruction->SetWriteBarrierKind(WriteBarrierKind::kDontEmit);
++      MaybeRecordStat(stats_, MethodCompilationStat::kRemovedWriteBarrier);
++    } else {
++      const bool inserted = current_write_barriers_.insert({cls, instruction}).second;
++      DCHECK(inserted);
++      DCHECK(instruction->GetWriteBarrierKind() != WriteBarrierKind::kDontEmit);
++    }
++  }
++
++  void VisitArraySet(HArraySet* instruction) override {
++    if (instruction->GetSideEffects().Includes(SideEffects::CanTriggerGC())) {
++      ClearCurrentValues();
++    }
++
++    if (instruction->GetComponentType() != DataType::Type::kReference ||
++        instruction->GetValue()->IsNullConstant()) {
++      instruction->SetWriteBarrierKind(WriteBarrierKind::kDontEmit);
++      return;
++    }
++
++    HInstruction* arr = HuntForOriginalReference(instruction->InputAt(0));
++    MaybeRecordStat(stats_, MethodCompilationStat::kPossibleWriteBarrier);
++    auto it = current_write_barriers_.find(arr);
++    if (it != current_write_barriers_.end()) {
++      DCHECK(it->second->IsArraySet());
++      DCHECK(it->second->AsArraySet()->GetWriteBarrierKind() != WriteBarrierKind::kDontEmit);
++      DCHECK_EQ(it->second->GetBlock(), instruction->GetBlock());
++      // We never skip the null check in ArraySets so that value is already set.
++      DCHECK(it->second->AsArraySet()->GetWriteBarrierKind() == WriteBarrierKind::kEmitNoNullCheck);
++      instruction->SetWriteBarrierKind(WriteBarrierKind::kDontEmit);
++      MaybeRecordStat(stats_, MethodCompilationStat::kRemovedWriteBarrier);
++    } else {
++      const bool inserted = current_write_barriers_.insert({arr, instruction}).second;
++      DCHECK(inserted);
++      DCHECK(instruction->GetWriteBarrierKind() != WriteBarrierKind::kDontEmit);
++    }
++  }
++
++  void VisitInstruction(HInstruction* instruction) override {
++    if (instruction->GetSideEffects().Includes(SideEffects::CanTriggerGC())) {
++      ClearCurrentValues();
++    }
++  }
++
++ private:
++  void ClearCurrentValues() { current_write_barriers_.clear(); }
++
++  HInstruction* HuntForOriginalReference(HInstruction* ref) const {
++    // An original reference can be transformed by instructions like:
++    //   i0 NewArray
++    //   i1 HInstruction(i0)  <-- NullCheck, BoundType, IntermediateAddress.
++    //   i2 ArraySet(i1, index, value)
++    DCHECK(ref != nullptr);
++    while (ref->IsNullCheck() || ref->IsBoundType() || ref->IsIntermediateAddress()) {
++      ref = ref->InputAt(0);
++    }
++    return ref;
++  }
++
++  ScopedArenaAllocator scoped_allocator_;
++
++  // Stores a map of <Receiver, InstructionWhereTheWriteBarrierIs>.
++  // `InstructionWhereTheWriteBarrierIs` is used for DCHECKs only.
++  ScopedArenaHashMap<HInstruction*, HInstruction*> current_write_barriers_;
++
++  OptimizingCompilerStats* const stats_;
++
++  DISALLOW_COPY_AND_ASSIGN(WBEVisitor);
++};
++
++bool WriteBarrierElimination::Run() {
++  WBEVisitor wbe_visitor(graph_, stats_);
++  wbe_visitor.VisitReversePostOrder();
++  return true;
++}
++
++}  // namespace art
+diff --git a/compiler/optimizing/write_barrier_elimination.h b/compiler/optimizing/write_barrier_elimination.h
+new file mode 100644
+index 0000000000..a3769e7421
+--- /dev/null
++++ b/compiler/optimizing/write_barrier_elimination.h
+@@ -0,0 +1,56 @@
++/*
++ * Copyright (C) 2022 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#ifndef ART_COMPILER_OPTIMIZING_WRITE_BARRIER_ELIMINATION_H_
++#define ART_COMPILER_OPTIMIZING_WRITE_BARRIER_ELIMINATION_H_
++
++#include "base/macros.h"
++#include "optimization.h"
++
++namespace art HIDDEN {
++
++// Eliminates unnecessary write barriers from InstanceFieldSet, StaticFieldSet, and ArraySet.
++//
++// We can eliminate redundant write barriers as we don't need several for the same receiver. For
++// example:
++//   MyObject o;
++//   o.inner_obj = io;
++//   o.inner_obj2 = io2;
++//   o.inner_obj3 = io3;
++// We can keep the write barrier for `inner_obj` and remove the other two.
++//
++// In order to do this, we set the WriteBarrierKind of the instruction. The instruction's kind are
++// set to kEmitNoNullCheck (if this write barrier coalesced other write barriers, we don't want to
++// perform the null check optimization), or to kDontEmit (if the write barrier as a whole is not
++// needed).
++class WriteBarrierElimination : public HOptimization {
++ public:
++  WriteBarrierElimination(HGraph* graph,
++                          OptimizingCompilerStats* stats,
++                          const char* name = kWBEPassName)
++      : HOptimization(graph, name, stats) {}
++
++  bool Run() override;
++
++  static constexpr const char* kWBEPassName = "write_barrier_elimination";
++
++ private:
++  DISALLOW_COPY_AND_ASSIGN(WriteBarrierElimination);
++};
++
++}  // namespace art
++
++#endif  // ART_COMPILER_OPTIMIZING_WRITE_BARRIER_ELIMINATION_H_
+diff --git a/libartbase/base/arena_allocator.cc b/libartbase/base/arena_allocator.cc
+index 76f28834c5..e990e983cf 100644
+--- a/libartbase/base/arena_allocator.cc
++++ b/libartbase/base/arena_allocator.cc
+@@ -75,6 +75,7 @@ const char* const ArenaAllocatorStatsImpl<kCount>::kAllocNames[] = {
+   "LSE          ",
+   "CFRE         ",
+   "LICM         ",
++  "WBE          ",
+   "LoopOpt      ",
+   "SsaLiveness  ",
+   "SsaPhiElim   ",
+diff --git a/libartbase/base/arena_allocator.h b/libartbase/base/arena_allocator.h
+index 12a44d55ba..17780f3759 100644
+--- a/libartbase/base/arena_allocator.h
++++ b/libartbase/base/arena_allocator.h
+@@ -84,6 +84,7 @@ enum ArenaAllocKind {
+   kArenaAllocLSE,
+   kArenaAllocCFRE,
+   kArenaAllocLICM,
++  kArenaAllocWBE,
+   kArenaAllocLoopOptimization,
+   kArenaAllocSsaLiveness,
+   kArenaAllocSsaPhiElimination,
+diff --git a/test/2247-checker-write-barrier-elimination/expected-stderr.txt b/test/2247-checker-write-barrier-elimination/expected-stderr.txt
+new file mode 100644
+index 0000000000..e69de29bb2
+diff --git a/test/2247-checker-write-barrier-elimination/expected-stdout.txt b/test/2247-checker-write-barrier-elimination/expected-stdout.txt
+new file mode 100644
+index 0000000000..e69de29bb2
+diff --git a/test/2247-checker-write-barrier-elimination/info.txt b/test/2247-checker-write-barrier-elimination/info.txt
+new file mode 100644
+index 0000000000..2515317f01
+--- /dev/null
++++ b/test/2247-checker-write-barrier-elimination/info.txt
+@@ -0,0 +1 @@
++Tests that we eliminate unneeded write barriers.
+diff --git a/test/2247-checker-write-barrier-elimination/src/Main.java b/test/2247-checker-write-barrier-elimination/src/Main.java
+new file mode 100644
+index 0000000000..76fb05a2c0
+--- /dev/null
++++ b/test/2247-checker-write-barrier-elimination/src/Main.java
+@@ -0,0 +1,332 @@
++/*
++ * Copyright (C) 2022 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++class MultipleObject {
++    Object inner;
++    Object inner2;
++
++    static Object inner_static;
++}
++
++public class Main {
++    public static void main(String[] args) throws Error {
++        // Several sets, same receiver.
++        $noinline$testInstanceFieldSets(new Main(), new Object(), new Object(), new Object());
++        $noinline$testStaticFieldSets(new Object(), new Object(), new Object());
++        // Object ArraySets can throw since they need a type check so we cannot perform the
++        // optimization.
++        $noinline$testArraySets(new Object[3], new Object(), new Object(), new Object());
++        // If we are swapping elements in the array, no need for a type check.
++        $noinline$testSwapArray(new Object[3]);
++        // If the array and the values have the same RTI, no need for a type check.
++        $noinline$testArraySetsSameRTI();
++
++        // We cannot rely on `null` sets to perform the optimization.
++        $noinline$testNullInstanceFieldSets(new Main(), new Object());
++        $noinline$testNullStaticFieldSets(new Object());
++        $noinline$testNullArraySets(new Object[3], new Object());
++
++        // Several sets, multiple receivers. (set obj1, obj2, obj1 and see that the card of obj1
++        // gets eliminated)
++        $noinline$testInstanceFieldSetsMultipleReceivers(
++                new Main(), new Object(), new Object(), new Object());
++        $noinline$testStaticFieldSetsMultipleReceivers(new Object(), new Object(), new Object());
++        $noinline$testArraySetsMultipleReceiversSameRTI();
++
++        // The write barrier elimination optimization is blocked by invokes, suspend checks, and
++        // instructions that can throw.
++        $noinline$testInstanceFieldSetsBlocked(
++                new Main(), new Object(), new Object(), new Object());
++        $noinline$testStaticFieldSetsBlocked(new Object(), new Object(), new Object());
++        $noinline$testArraySetsSameRTIBlocked();
++    }
++
++    /// CHECK-START: Main Main.$noinline$testInstanceFieldSets(Main, java.lang.Object, java.lang.Object, java.lang.Object) disassembly (after)
++    /// CHECK: InstanceFieldSet field_name:Main.inner field_type:Reference write_barrier_kind:EmitNoNullCheck
++    /// CHECK: InstanceFieldSet field_name:Main.inner2 field_type:Reference write_barrier_kind:DontEmit
++    /// CHECK: InstanceFieldSet field_name:Main.inner3 field_type:Reference write_barrier_kind:DontEmit
++
++    /// CHECK-START: Main Main.$noinline$testInstanceFieldSets(Main, java.lang.Object, java.lang.Object, java.lang.Object) disassembly (after)
++    /// CHECK: ; card_table
++    /// CHECK-NOT: ; card_table
++    private static Main $noinline$testInstanceFieldSets(Main m, Object o, Object o2, Object o3) {
++        m.inner = o;
++        m.inner2 = o2;
++        m.inner3 = o3;
++        return m;
++    }
++
++    /// CHECK-START: void Main.$noinline$testStaticFieldSets(java.lang.Object, java.lang.Object, java.lang.Object) disassembly (after)
++    /// CHECK: StaticFieldSet field_name:Main.inner_static field_type:Reference write_barrier_kind:EmitNoNullCheck
++    /// CHECK: StaticFieldSet field_name:Main.inner_static2 field_type:Reference write_barrier_kind:DontEmit
++    /// CHECK: StaticFieldSet field_name:Main.inner_static3 field_type:Reference write_barrier_kind:DontEmit
++
++    /// CHECK-START: void Main.$noinline$testStaticFieldSets(java.lang.Object, java.lang.Object, java.lang.Object) disassembly (after)
++    /// CHECK: ; card_table
++    /// CHECK-NOT: ; card_table
++    private static void $noinline$testStaticFieldSets(Object o, Object o2, Object o3) {
++        inner_static = o;
++        inner_static2 = o2;
++        inner_static3 = o3;
++    }
++
++    /// CHECK-START: java.lang.Object[] Main.$noinline$testArraySets(java.lang.Object[], java.lang.Object, java.lang.Object, java.lang.Object) disassembly (after)
++    /// CHECK: ArraySet needs_type_check:true can_trigger_gc:true write_barrier_kind:EmitNoNullCheck
++    /// CHECK: ArraySet needs_type_check:true can_trigger_gc:true write_barrier_kind:EmitNoNullCheck
++    /// CHECK: ArraySet needs_type_check:true can_trigger_gc:true write_barrier_kind:EmitNoNullCheck
++
++    /// CHECK-START: java.lang.Object[] Main.$noinline$testArraySets(java.lang.Object[], java.lang.Object, java.lang.Object, java.lang.Object) disassembly (after)
++    /// CHECK: ; card_table
++    /// CHECK: ; card_table
++    /// CHECK: ; card_table
++    /// CHECK-NOT: ; card_table
++    private static java.lang.Object[] $noinline$testArraySets(
++            Object[] arr, Object o, Object o2, Object o3) {
++        arr[0] = o;
++        arr[1] = o2;
++        arr[2] = o3;
++        return arr;
++    }
++
++    /// CHECK-START: java.lang.Object[] Main.$noinline$testSwapArray(java.lang.Object[]) disassembly (after)
++    /// CHECK: ArraySet needs_type_check:false can_trigger_gc:false write_barrier_kind:EmitNoNullCheck
++    /// CHECK: ArraySet needs_type_check:false can_trigger_gc:false write_barrier_kind:DontEmit
++    /// CHECK: ArraySet needs_type_check:false can_trigger_gc:false write_barrier_kind:DontEmit
++
++    /// CHECK-START: java.lang.Object[] Main.$noinline$testSwapArray(java.lang.Object[]) disassembly (after)
++    /// CHECK: ; card_table
++    /// CHECK-NOT: ; card_table
++    private static java.lang.Object[] $noinline$testSwapArray(Object[] arr) {
++        arr[0] = arr[1];
++        arr[1] = arr[2];
++        arr[2] = arr[0];
++        return arr;
++    }
++
++    /// CHECK-START: java.lang.Object[] Main.$noinline$testArraySetsSameRTI() disassembly (after)
++    /// CHECK: ArraySet needs_type_check:false can_trigger_gc:false write_barrier_kind:EmitNoNullCheck
++    /// CHECK: ArraySet needs_type_check:false can_trigger_gc:false write_barrier_kind:DontEmit
++    /// CHECK: ArraySet needs_type_check:false can_trigger_gc:false write_barrier_kind:DontEmit
++
++    /// CHECK-START: java.lang.Object[] Main.$noinline$testArraySetsSameRTI() disassembly (after)
++    /// CHECK: ; card_table
++    /// CHECK-NOT: ; card_table
++    private static java.lang.Object[] $noinline$testArraySetsSameRTI() {
++        Object[] arr = new Object[3];
++        arr[0] = inner_static;
++        arr[1] = inner_static2;
++        arr[2] = inner_static3;
++        return arr;
++    }
++
++    /// CHECK-START: Main Main.$noinline$testNullInstanceFieldSets(Main, java.lang.Object) disassembly (after)
++    /// CHECK: InstanceFieldSet field_name:Main.inner field_type:Reference write_barrier_kind:DontEmit
++    /// CHECK: InstanceFieldSet field_name:Main.inner2 field_type:Reference write_barrier_kind:EmitWithNullCheck
++    /// CHECK: InstanceFieldSet field_name:Main.inner3 field_type:Reference write_barrier_kind:DontEmit
++
++    /// CHECK-START: Main Main.$noinline$testNullInstanceFieldSets(Main, java.lang.Object) disassembly (after)
++    /// CHECK: ; card_table
++    /// CHECK-NOT: ; card_table
++    private static Main $noinline$testNullInstanceFieldSets(Main m, Object o) {
++        m.inner = null;
++        m.inner2 = o;
++        m.inner3 = null;
++        return m;
++    }
++
++    /// CHECK-START: void Main.$noinline$testNullStaticFieldSets(java.lang.Object) disassembly (after)
++    /// CHECK: StaticFieldSet field_name:Main.inner_static field_type:Reference write_barrier_kind:DontEmit
++    /// CHECK: StaticFieldSet field_name:Main.inner_static2 field_type:Reference write_barrier_kind:EmitWithNullCheck
++    /// CHECK: StaticFieldSet field_name:Main.inner_static3 field_type:Reference write_barrier_kind:DontEmit
++
++    /// CHECK-START: void Main.$noinline$testNullStaticFieldSets(java.lang.Object) disassembly (after)
++    /// CHECK: ; card_table
++    /// CHECK-NOT: ; card_table
++    private static void $noinline$testNullStaticFieldSets(Object o) {
++        inner_static = null;
++        inner_static2 = o;
++        inner_static3 = null;
++    }
++
++    /// CHECK-START: java.lang.Object[] Main.$noinline$testNullArraySets(java.lang.Object[], java.lang.Object) disassembly (after)
++    /// CHECK: ArraySet needs_type_check:false can_trigger_gc:false write_barrier_kind:DontEmit
++    /// CHECK: ArraySet needs_type_check:true can_trigger_gc:true write_barrier_kind:EmitNoNullCheck
++    /// CHECK: ArraySet needs_type_check:false can_trigger_gc:false write_barrier_kind:DontEmit
++
++    /// CHECK-START: java.lang.Object[] Main.$noinline$testNullArraySets(java.lang.Object[], java.lang.Object) disassembly (after)
++    /// CHECK: ; card_table
++    /// CHECK-NOT: ; card_table
++    private static Object[] $noinline$testNullArraySets(Object[] arr, Object o) {
++        arr[0] = null;
++        arr[1] = o;
++        arr[2] = null;
++        return arr;
++    }
++
++    /// CHECK-START: Main Main.$noinline$testInstanceFieldSetsMultipleReceivers(Main, java.lang.Object, java.lang.Object, java.lang.Object) disassembly (after)
++    // There are two extra card_tables for the initialization of the MultipleObject.
++    /// CHECK: InstanceFieldSet field_name:MultipleObject.inner field_type:Reference write_barrier_kind:EmitNoNullCheck
++    /// CHECK: InstanceFieldSet field_name:MultipleObject.inner field_type:Reference write_barrier_kind:EmitWithNullCheck
++    /// CHECK: InstanceFieldSet field_name:MultipleObject.inner2 field_type:Reference write_barrier_kind:DontEmit
++
++    // Each one of the two NewInstance instructions have their own `card_table` reference.
++    /// CHECK-START: Main Main.$noinline$testInstanceFieldSetsMultipleReceivers(Main, java.lang.Object, java.lang.Object, java.lang.Object) disassembly (after)
++    /// CHECK: ; card_table
++    /// CHECK: ; card_table
++    /// CHECK: ; card_table
++    /// CHECK: ; card_table
++    /// CHECK-NOT: ; card_table
++    private static Main $noinline$testInstanceFieldSetsMultipleReceivers(
++            Main m, Object o, Object o2, Object o3) throws Error {
++        m.mo = new MultipleObject();
++        m.mo2 = new MultipleObject();
++
++        m.mo.inner = o;
++        // This card table for `m.mo2` can't me removed. Note that in `m.mo2 = new
++        // MultipleObject();` above the receiver is `m`, not `m.mo2.
++        m.mo2.inner = o2;
++        // This card table for `m.mo` can me removed.
++        m.mo.inner2 = o3;
++        return m;
++    }
++
++    /// CHECK-START: void Main.$noinline$testStaticFieldSetsMultipleReceivers(java.lang.Object, java.lang.Object, java.lang.Object) disassembly (after)
++    /// CHECK: StaticFieldSet field_name:MultipleObject.inner_static field_type:Reference write_barrier_kind:EmitWithNullCheck
++    /// CHECK: StaticFieldSet field_name:Main.inner_static2 field_type:Reference write_barrier_kind:EmitNoNullCheck
++    /// CHECK: StaticFieldSet field_name:Main.inner_static3 field_type:Reference write_barrier_kind:DontEmit
++
++    /// CHECK-START: void Main.$noinline$testStaticFieldSetsMultipleReceivers(java.lang.Object, java.lang.Object, java.lang.Object) disassembly (after)
++    /// CHECK: ; card_table
++    /// CHECK: ; card_table
++    /// CHECK-NOT: ; card_table
++    private static void $noinline$testStaticFieldSetsMultipleReceivers(
++            Object o, Object o2, Object o3) {
++        MultipleObject.inner_static = o;
++        inner_static2 = o2;
++        inner_static3 = o3;
++    }
++
++    /// CHECK-START: java.lang.Object[][] Main.$noinline$testArraySetsMultipleReceiversSameRTI() disassembly (after)
++    // Initializing the values
++    /// CHECK: ArraySet needs_type_check:false can_trigger_gc:false write_barrier_kind:EmitNoNullCheck
++    /// CHECK: ArraySet needs_type_check:false can_trigger_gc:false write_barrier_kind:EmitNoNullCheck
++    /// CHECK: ArraySet needs_type_check:false can_trigger_gc:false write_barrier_kind:DontEmit
++    // Setting the `array_of_arrays`.
++    /// CHECK: ArraySet needs_type_check:false can_trigger_gc:false write_barrier_kind:EmitNoNullCheck
++    /// CHECK: ArraySet needs_type_check:false can_trigger_gc:false write_barrier_kind:DontEmit
++
++    /// CHECK-START: java.lang.Object[][] Main.$noinline$testArraySetsMultipleReceiversSameRTI() disassembly (after)
++    // Two array sets can't eliminate the write barrier
++    /// CHECK: ; card_table
++    /// CHECK: ; card_table
++    // One write barrier for the array of arrays' sets
++    /// CHECK: ; card_table
++    /// CHECK-NOT: ; card_table
++    private static java.lang.Object[][] $noinline$testArraySetsMultipleReceiversSameRTI() {
++        Object[] arr = new Object[3];
++        Object[] other_arr = new Object[3];
++
++        arr[0] = inner_static;
++        other_arr[1] = inner_static2;
++        arr[2] = inner_static3;
++
++        // Return them so that LSE doesn't delete them
++        Object[][] array_of_arrays = {arr, other_arr};
++        return array_of_arrays;
++    }
++
++    private static void $noinline$emptyMethod() {}
++
++    /// CHECK-START: Main Main.$noinline$testInstanceFieldSetsBlocked(Main, java.lang.Object, java.lang.Object, java.lang.Object) disassembly (after)
++    /// CHECK: InstanceFieldSet field_name:Main.inner field_type:Reference write_barrier_kind:EmitWithNullCheck
++    /// CHECK: InvokeStaticOrDirect method_name:Main.$noinline$emptyMethod
++    /// CHECK: InstanceFieldSet field_name:Main.inner2 field_type:Reference write_barrier_kind:EmitWithNullCheck
++    /// CHECK: MonitorOperation kind:enter
++    /// CHECK: InstanceFieldSet field_name:Main.inner3 field_type:Reference write_barrier_kind:EmitWithNullCheck
++
++    /// CHECK-START: Main Main.$noinline$testInstanceFieldSetsBlocked(Main, java.lang.Object, java.lang.Object, java.lang.Object) disassembly (after)
++    /// CHECK: ; card_table
++    /// CHECK: ; card_table
++    /// CHECK: ; card_table
++    /// CHECK-NOT: ; card_table
++    private static Main $noinline$testInstanceFieldSetsBlocked(
++            Main m, Object o, Object o2, Object o3) {
++        m.inner = o;
++        $noinline$emptyMethod();
++        m.inner2 = o2;
++        synchronized (m) {
++            m.inner3 = o3;
++        }
++        return m;
++    }
++
++    /// CHECK-START: void Main.$noinline$testStaticFieldSetsBlocked(java.lang.Object, java.lang.Object, java.lang.Object) disassembly (after)
++    /// CHECK: StaticFieldSet field_name:Main.inner_static field_type:Reference write_barrier_kind:EmitWithNullCheck
++    /// CHECK: InvokeStaticOrDirect method_name:Main.$noinline$emptyMethod
++    /// CHECK: StaticFieldSet field_name:Main.inner_static2 field_type:Reference write_barrier_kind:EmitWithNullCheck
++    /// CHECK: MonitorOperation kind:enter
++    /// CHECK: StaticFieldSet field_name:Main.inner_static3 field_type:Reference write_barrier_kind:EmitWithNullCheck
++
++    /// CHECK-START: void Main.$noinline$testStaticFieldSetsBlocked(java.lang.Object, java.lang.Object, java.lang.Object) disassembly (after)
++    /// CHECK: ; card_table
++    /// CHECK: ; card_table
++    /// CHECK: ; card_table
++    /// CHECK-NOT: ; card_table
++    private static void $noinline$testStaticFieldSetsBlocked(Object o, Object o2, Object o3) {
++        inner_static = o;
++        $noinline$emptyMethod();
++        inner_static2 = o2;
++        Main m = new Main();
++        synchronized (m) {
++            inner_static3 = o3;
++        }
++    }
++
++    /// CHECK-START: java.lang.Object[] Main.$noinline$testArraySetsSameRTIBlocked() disassembly (after)
++    /// CHECK: ArraySet needs_type_check:false can_trigger_gc:false write_barrier_kind:EmitNoNullCheck
++    /// CHECK: InvokeStaticOrDirect method_name:Main.$noinline$emptyMethod
++    /// CHECK: ArraySet needs_type_check:false can_trigger_gc:false write_barrier_kind:EmitNoNullCheck
++    /// CHECK: MonitorOperation kind:enter
++    /// CHECK: ArraySet needs_type_check:false can_trigger_gc:false write_barrier_kind:EmitNoNullCheck
++
++    /// CHECK-START: java.lang.Object[] Main.$noinline$testArraySetsSameRTIBlocked() disassembly (after)
++    /// CHECK: ; card_table
++    /// CHECK: ; card_table
++    /// CHECK: ; card_table
++    /// CHECK-NOT: ; card_table
++    private static java.lang.Object[] $noinline$testArraySetsSameRTIBlocked() {
++        Object[] arr = new Object[3];
++        arr[0] = inner_static;
++        $noinline$emptyMethod();
++        arr[1] = inner_static2;
++        Main m = new Main();
++        synchronized (m) {
++            arr[2] = inner_static3;
++        }
++        return arr;
++    }
++
++    Object inner;
++    Object inner2;
++    Object inner3;
++
++    MultipleObject mo;
++    MultipleObject mo2;
++
++    static Object inner_static;
++    static Object inner_static2;
++    static Object inner_static3;
++}
+-- 
+2.42.0
+

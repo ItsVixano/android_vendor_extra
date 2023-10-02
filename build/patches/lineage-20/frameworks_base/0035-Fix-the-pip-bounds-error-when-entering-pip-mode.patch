@@ -1,0 +1,37 @@
+From 072f408fb287ac0883ac9ed92c6a765b842197d3 Mon Sep 17 00:00:00 2001
+From: buwenjing <buwenjing@xiaomi.com>
+Date: Mon, 13 Feb 2023 10:16:55 +0800
+Subject: [PATCH 35/72] Fix the pip bounds error when entering pip mode.
+
+Ignore the motion event When the pip entry animation is waiting to be started
+
+Bug: 269007413
+Test: Manual test
+
+Change-Id: I462f16b19689de52f567f15b90e1f71c0e87f4fc
+Signed-off-by: buwenjing <buwenjing@xiaomi.com>
+---
+ .../com/android/wm/shell/pip/phone/PipTouchHandler.java    | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/libs/WindowManager/Shell/src/com/android/wm/shell/pip/phone/PipTouchHandler.java b/libs/WindowManager/Shell/src/com/android/wm/shell/pip/phone/PipTouchHandler.java
+index 466da0e8..8f6cee76 100644
+--- a/libs/WindowManager/Shell/src/com/android/wm/shell/pip/phone/PipTouchHandler.java
++++ b/libs/WindowManager/Shell/src/com/android/wm/shell/pip/phone/PipTouchHandler.java
+@@ -586,6 +586,13 @@ public class PipTouchHandler {
+             return true;
+         }
+ 
++        // Ignore the motion event When the entry animation is waiting to be started
++        if (!mTouchState.isUserInteracting() && mPipTaskOrganizer.isEntryScheduled()) {
++            ProtoLog.wtf(ShellProtoLogGroup.WM_SHELL_PICTURE_IN_PICTURE,
++                    "%s: Waiting to start the entry animation, skip the motion event.", TAG);
++            return true;
++        }
++
+         // Update the touch state
+         mTouchState.onTouchEvent(ev);
+ 
+-- 
+2.42.0
+

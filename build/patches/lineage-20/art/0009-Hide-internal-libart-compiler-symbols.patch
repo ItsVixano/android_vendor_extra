@@ -1,0 +1,278 @@
+From 492aceeb241eeef2cc8909fd9c91f1e51d812a6d Mon Sep 17 00:00:00 2001
+From: Dmitrii Ishcheikin <ishcheikin@google.com>
+Date: Wed, 31 Aug 2022 16:32:53 +0000
+Subject: [PATCH 09/30] Hide internal libart-compiler symbols
+
+Add version_script for libart-compiler
+Link libart-compiler statically for tests that use internal symbols
+Add a test to ensure that runtime can use jit_load
+
+libart-compiler.so size after applying version_script:
+arm64*: 4044k   -> 3332k   (-17.6%)
+arm32:  3086564 -> 2535600 (-17.9%)
+x86:    5375496 -> 4183368 (-22.2%)
+x86_64: 5670976 -> 4509632 (-20.5%)
+*sparse file size on device obtained by "ls -lsk libart-compiler.so"
+
+Bug: 186902856
+Change-Id: I9ea03c70abcb7693ed3b8c7a672e194b8a139f1f
+Test: m acts_tests catbox cts general-tests host-unit-tests test_mapping tradefed-all vts dist
+Test: m test-art-host-gtest-art_runtime_tests test-art-host-gtest-art_runtime_compiler_tests
+---
+ compiler/Android.bp          | 11 ++++++---
+ compiler/libart-compiler.map | 46 ++++++++++++++++++++++++++++++++++++
+ dex2oat/Android.bp           | 14 +++++++----
+ oatdump/Android.bp           |  6 +++++
+ runtime/Android.bp           |  1 +
+ runtime/jit/jit_load_test.cc | 38 +++++++++++++++++++++++++++++
+ 6 files changed, 108 insertions(+), 8 deletions(-)
+ create mode 100644 compiler/libart-compiler.map
+ create mode 100644 runtime/jit/jit_load_test.cc
+
+diff --git a/compiler/Android.bp b/compiler/Android.bp
+index de98fdb993..15d86ed24b 100644
+--- a/compiler/Android.bp
++++ b/compiler/Android.bp
+@@ -176,6 +176,7 @@ art_cc_defaults {
+     ],
+ 
+     export_include_dirs: ["."],
++    version_script: "libart-compiler.map",
+ }
+ 
+ cc_defaults {
+@@ -488,11 +489,12 @@ art_cc_test {
+     ],
+     shared_libs: [
+         "libprofiled",
+-        "libartd-compiler",
+         "libartd-simulator-container",
++        "liblzma",
+     ],
+     static_libs: [
+         "libvixld",
++        "libartd-compiler",
+     ],
+ }
+ 
+@@ -506,7 +508,8 @@ art_cc_test {
+     data: [":generate-boot-image"],
+     shared_libs: [
+         "libprofile",
+-        "libart-compiler",
++        "liblzma",
++        "libartpalette",
+     ],
+     static_libs: [
+         // For now, link `libart-simulator-container` statically for simplicity,
+@@ -516,6 +519,7 @@ art_cc_test {
+         // dynamically.
+         "libart-simulator-container",
+         "libvixl",
++        "libart-compiler",
+     ],
+     test_config: "art_standalone_compiler_tests.xml",
+ }
+@@ -548,9 +552,10 @@ art_cc_test {
+         },
+     },
+     shared_libs: [
+-        "libartd-compiler",
++        "liblzma",
+     ],
+     static_libs: [
++        "libartd-compiler",
+         "libvixld",
+     ],
+ }
+diff --git a/compiler/libart-compiler.map b/compiler/libart-compiler.map
+new file mode 100644
+index 0000000000..fb1eefc471
+--- /dev/null
++++ b/compiler/libart-compiler.map
+@@ -0,0 +1,46 @@
++
++ART_COMPILER {
++global:
++    global:
++        extern "C++" {
++            "art::CompiledCode::CodeDelta() const";
++            "art::CompiledCode::CodeDelta(art::InstructionSet)";
++            "art::CompiledCode::CodePointer(void const*, art::InstructionSet)";
++            "art::CompiledMethodStorage::CompiledMethodStorage(int)";
++            "art::CompiledMethodStorage::DumpMemoryUsage(std::__1::basic_ostream<char, std::__1::char_traits<char> >&, bool) const";
++            "art::CompiledMethodStorage::GetThunkCode(art::linker::LinkerPatch const&, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> >*)";
++            "art::CompiledMethodStorage::UniqueVMapTableEntries() const";
++            "art::CompiledMethodStorage::~CompiledMethodStorage()";
++            "art::Compiler::Create(art::CompilerOptions const&, art::CompiledMethodStorage*, art::Compiler::Kind)";
++            "art::CompilerOptions::CompilerOptions()";
++            "art::CompilerOptions::GetVerificationResults() const";
++            "art::CompilerOptions::IsImageClass(char const*) const";
++            "art::CompilerOptions::IsPreloadedClass(char const*) const";
++            "art::CompilerOptions::ParseDumpInitFailures(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > const&, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> >*)";
++            "art::CompilerOptions::ParseRegisterAllocationStrategy(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > const&, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> >*)";
++            "art::CompilerOptions::ShouldCompileWithClinitCheck(art::ArtMethod*) const";
++            "art::CompilerOptions::~CompilerOptions()";
++            "art::CreateTrampoline32(art::InstructionSet, art::EntryPointCallingConvention, art::ThreadOffset<(art::PointerSize)4>)";
++            "art::CreateTrampoline64(art::InstructionSet, art::EntryPointCallingConvention, art::ThreadOffset<(art::PointerSize)8>)";
++            "art::VerificationResults::AddRejectedClass(art::ClassReference)";
++            "art::VerificationResults::AddUncompilableMethod(art::MethodReference)";
++            "art::VerificationResults::IsClassRejected(art::ClassReference) const";
++            "art::VerificationResults::IsUncompilableMethod(art::MethodReference) const";
++            "art::VerificationResults::VerificationResults()";
++            "art::VerificationResults::~VerificationResults()";
++            "art::linker::operator<<(std::__1::basic_ostream<char, std::__1::char_traits<char> >&, art::linker::LinkerPatch::Type)";
++            "art::operator<<(std::__1::basic_ostream<char, std::__1::char_traits<char> >&, art::Whence const&)";
++            "void art::debug::WriteDebugInfo<art::ElfTypes32>(art::ElfBuilder<art::ElfTypes32>*, art::debug::DebugInfo const&)";
++            "void art::debug::WriteDebugInfo<art::ElfTypes64>(art::ElfBuilder<art::ElfTypes64>*, art::debug::DebugInfo const&)";
++            art::CompiledCode::AlignCode*;
++            art::CompiledMethod::*;
++            art::IntrinsicObjects*;
++            art::debug::MakeMiniDebugInfo*;
++        };
++
++        jit_load;
++
++    local:
++        *;
++};
++
+diff --git a/dex2oat/Android.bp b/dex2oat/Android.bp
+index 26cbd51459..3438853958 100644
+--- a/dex2oat/Android.bp
++++ b/dex2oat/Android.bp
+@@ -296,6 +296,7 @@ art_cc_binary {
+             ],
+             static_libs: [
+                 "libart-dex2oat",
++                "libelffile",
+             ],
+             lto: {
+                 thin: true,
+@@ -355,6 +356,7 @@ art_cc_binary {
+             ],
+             static_libs: [
+                 "libartd-dex2oat",
++                "libelffiled",
+             ],
+         },
+         host: {
+@@ -553,13 +555,14 @@ art_cc_test {
+     ],
+     shared_libs: [
+         "libartbased",
+-        "libartd-compiler",
+         "libartd-dexlayout",
++        "liblzma",
+         "libprofiled",
+     ],
+     static_libs: [
+-        "libartd-dex2oat-gtest",
++        "libartd-compiler",
+         "libartd-dex2oat",
++        "libartd-dex2oat-gtest",
+         "libvixld",
+     ],
+ }
+@@ -573,14 +576,15 @@ art_cc_test {
+     ],
+     data: [":generate-boot-image"],
+     shared_libs: [
+-        "libartbase",
+-        "libart-compiler",
+         "libart-dexlayout",
++        "libartbase",
++        "liblzma",
+         "libprofile",
+     ],
+     static_libs: [
+-        "libart-dex2oat-gtest",
++        "libart-compiler",
+         "libart-dex2oat",
++        "libart-dex2oat-gtest",
+         "libvixl",
+     ],
+     test_config: "art_standalone_dex2oat_tests.xml",
+diff --git a/oatdump/Android.bp b/oatdump/Android.bp
+index 57242801d7..ba7ceb5930 100644
+--- a/oatdump/Android.bp
++++ b/oatdump/Android.bp
+@@ -70,6 +70,9 @@ art_cc_binary {
+                 "libdexfile",
+                 "libprofile",
+             ],
++            static_libs: [
++                "libelffile",
++            ],
+         },
+         host: {
+             // Make the host binary static, except for system libraries.
+@@ -124,6 +127,9 @@ art_cc_binary {
+                 "libdexfiled",
+                 "libprofiled",
+             ],
++            static_libs: [
++                "libelffiled",
++            ],
+         },
+         host: {
+             // Make the host binary static, except for system libraries.
+diff --git a/runtime/Android.bp b/runtime/Android.bp
+index ba7f6cc2cc..477295aedf 100644
+--- a/runtime/Android.bp
++++ b/runtime/Android.bp
+@@ -817,6 +817,7 @@ art_cc_defaults {
+         "intern_table_test.cc",
+         "interpreter/safe_math_test.cc",
+         "interpreter/unstarted_runtime_test.cc",
++        "jit/jit_load_test.cc",
+         "jit/jit_memory_region_test.cc",
+         "jit/profile_saver_test.cc",
+         "jit/profiling_info_test.cc",
+diff --git a/runtime/jit/jit_load_test.cc b/runtime/jit/jit_load_test.cc
+new file mode 100644
+index 0000000000..4b080a57a3
+--- /dev/null
++++ b/runtime/jit/jit_load_test.cc
+@@ -0,0 +1,38 @@
++/*
++ * Copyright (C) 2022 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#include "common_runtime_test.h"
++#include "compiler_callbacks.h"
++
++namespace art {
++
++class JitLoadTest : public CommonRuntimeTest {
++ protected:
++  void SetUpRuntimeOptions(RuntimeOptions *options) override {
++    callbacks_.reset();
++    CommonRuntimeTest::SetUpRuntimeOptions(options);
++    options->push_back(std::make_pair("-Xusejit:true", nullptr));
++  }
++};
++
++
++TEST_F(JitLoadTest, JitLoad) {
++  Thread::Current()->TransitionFromSuspendedToRunnable();
++  runtime_->Start();
++  ASSERT_NE(runtime_->GetJit(), nullptr);
++}
++
++}  // namespace art
+-- 
+2.42.0
+

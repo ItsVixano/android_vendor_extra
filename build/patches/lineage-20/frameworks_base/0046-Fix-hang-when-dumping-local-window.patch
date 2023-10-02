@@ -1,0 +1,67 @@
+From 9e70ba0e1a76383a44d4d994c9988ae5684d0e55 Mon Sep 17 00:00:00 2001
+From: qinyige1 <qinyige1@xiaomi.com>
+Date: Wed, 18 Jan 2023 10:12:13 +0800
+Subject: [PATCH 46/72] Fix hang when dumping local window.
+
+Problem:
+Window dumping uses pipe for transfering data. This may
+cause IO hang when dumping local window if buffer is full.
+
+Solution:
+Dump local window in IoThread's executor.
+
+Bug: 267242455
+Test: Manual && Monkey Test
+Change-Id: I11043a79f03f7f71d0ca1daf8215580535a5d34d
+---
+ .../server/wm/WindowManagerShellCommand.java  | 20 +++++++++++++++++--
+ 1 file changed, 18 insertions(+), 2 deletions(-)
+
+diff --git a/services/core/java/com/android/server/wm/WindowManagerShellCommand.java b/services/core/java/com/android/server/wm/WindowManagerShellCommand.java
+index adf5310b..5b453fe1 100644
+--- a/services/core/java/com/android/server/wm/WindowManagerShellCommand.java
++++ b/services/core/java/com/android/server/wm/WindowManagerShellCommand.java
+@@ -34,6 +34,7 @@ import android.content.res.Resources.NotFoundException;
+ import android.graphics.Color;
+ import android.graphics.Point;
+ import android.graphics.Rect;
++import android.os.ParcelFileDescriptor;
+ import android.os.RemoteException;
+ import android.os.ShellCommand;
+ import android.os.UserHandle;
+@@ -46,6 +47,7 @@ import android.view.ViewDebug;
+ 
+ import com.android.internal.os.ByteTransferPipe;
+ import com.android.internal.protolog.ProtoLogImpl;
++import com.android.server.IoThread;
+ import com.android.server.wm.LetterboxConfiguration.LetterboxBackgroundType;
+ import com.android.server.wm.LetterboxConfiguration.LetterboxHorizontalReachabilityPosition;
+ import com.android.server.wm.LetterboxConfiguration.LetterboxVerticalReachabilityPosition;
+@@ -572,8 +574,22 @@ public class WindowManagerShellCommand extends ShellCommand {
+                         ByteTransferPipe pipe = null;
+                         try {
+                             pipe = new ByteTransferPipe();
+-                            w.mClient.executeCommand(ViewDebug.REMOTE_COMMAND_DUMP_ENCODED, null,
+-                                    pipe.getWriteFd());
++                            final ParcelFileDescriptor pfd = pipe.getWriteFd();
++                            if (w.isClientLocal()) {
++                                // Make it asynchronous to avoid writer from being blocked
++                                // by waiting for the buffer to be consumed in the same process.
++                                IoThread.getExecutor().execute(() -> {
++                                    try {
++                                        w.mClient.executeCommand(
++                                                ViewDebug.REMOTE_COMMAND_DUMP_ENCODED, null, pfd);
++                                    } catch (RemoteException e) {
++                                        // Ignore for local call.
++                                    }
++                                });
++                            } else {
++                                w.mClient.executeCommand(
++                                        ViewDebug.REMOTE_COMMAND_DUMP_ENCODED, null, pfd);
++                            }
+                             requestList.add(Pair.create(w.getName(), pipe));
+                         } catch (IOException | RemoteException e) {
+                             // Skip this window
+-- 
+2.42.0
+

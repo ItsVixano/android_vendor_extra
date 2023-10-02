@@ -1,0 +1,30 @@
+From 5c9f983964c4be897409ee21392f2cdad24cdd34 Mon Sep 17 00:00:00 2001
+From: Bart Van Assche <bvanassche@google.com>
+Date: Wed, 22 Mar 2023 14:50:23 -0700
+Subject: [PATCH 45/72] Do not kill the server process itself
+
+Change-Id: I47612fbd6764903b119adde0e414093a875e93da
+Signed-off-by: Bart Van Assche <bvanassche@google.com>
+---
+ services/core/java/com/android/server/am/ProcessList.java | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/services/core/java/com/android/server/am/ProcessList.java b/services/core/java/com/android/server/am/ProcessList.java
+index 8c9373b9..f3ff8ec1 100644
+--- a/services/core/java/com/android/server/am/ProcessList.java
++++ b/services/core/java/com/android/server/am/ProcessList.java
+@@ -2571,7 +2571,10 @@ public final class ProcessList {
+                     + ", " + reason);
+             app.setPendingStart(false);
+             killProcessQuiet(pid);
+-            Process.killProcessGroup(app.uid, app.getPid());
++            final int appPid = app.getPid();
++            if (appPid != 0) {
++                Process.killProcessGroup(app.uid, appPid);
++            }
+             noteAppKill(app, ApplicationExitInfo.REASON_OTHER,
+                     ApplicationExitInfo.SUBREASON_INVALID_START, reason);
+             return false;
+-- 
+2.42.0
+

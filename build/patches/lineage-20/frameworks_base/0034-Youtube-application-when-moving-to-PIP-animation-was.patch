@@ -1,0 +1,66 @@
+From 09315a12be0fcb619b5862b6d933d5b207b2eac2 Mon Sep 17 00:00:00 2001
+From: "pioush.kumar-IN009423" <pioush.kumar@oppo.com>
+Date: Tue, 7 Mar 2023 11:04:55 +0530
+Subject: [PATCH 34/72] Youtube application when moving to PIP animation was
+ very bad
+
+Problem: {
+    1. Start any new task with activity A
+    2. From Activity A start new activity B. Finish A. B must be single task.
+    3. B must be auto pip enabled. ( private final PictureInPictureParams.Builder mPipParamsBuilder = new PictureInPictureParams.Builder() .setAspectRatio(null); setPictureInPictureParams(mPipParamsBuilder.setAutoEnterEnabled(true).build()); )
+    4. start activity C from B with flags { Intent intent = new Intent(MainActivity.this, com.example.pip.MainActivity.class); intent.addFlags(FLAG_ACTIVITY_BROUGHT_TO_FRONT | Intent.FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS|FLAG_ACTIVITY_PREVIOUS_IS_TOP); startActivity(intent); }
+    5. B will move to PIP.
+    6. Now press back key on C.
+    7. Now open recents.
+    8. Try to open same app.
+    9. App will automatically close
+}
+
+Solution: {
+        1. there are 2 tasks. One is PIP task and one is its parent task, in which dialog is opened.
+        2. Parent task has a variable mPipChildActiivty which points to PIP activity and
+        3. PIP task mLastParentBeforePip which points to Parent task. Both works in pairs
+        4. But in this issue parent task is removed.
+        5. But the mPipChildActiivty and mLastParentBeforePip are not dereferenced.
+        6. Dereference the both variables when task is removed.
+}
+
+Bug: 265123000
+
+Change-Id: Iccb6a101b6631eb6bc265ca30a299ced2ee2f5dd
+Signed-off-by: pioush.kumar-IN009423 <pioush.kumar@oppo.com>
+---
+ services/core/java/com/android/server/wm/ActivityRecord.java | 2 +-
+ services/core/java/com/android/server/wm/Task.java           | 3 +++
+ 2 files changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/services/core/java/com/android/server/wm/ActivityRecord.java b/services/core/java/com/android/server/wm/ActivityRecord.java
+index a4de28f7..ac3fc92a 100644
+--- a/services/core/java/com/android/server/wm/ActivityRecord.java
++++ b/services/core/java/com/android/server/wm/ActivityRecord.java
+@@ -1721,7 +1721,7 @@ final class ActivityRecord extends WindowToken implements WindowManagerService.A
+                 : null;
+     }
+ 
+-    private void clearLastParentBeforePip() {
++    void clearLastParentBeforePip() {
+         if (mLastParentBeforePip != null) {
+             mLastParentBeforePip.mChildPipActivity = null;
+             mLastParentBeforePip = null;
+diff --git a/services/core/java/com/android/server/wm/Task.java b/services/core/java/com/android/server/wm/Task.java
+index 1ddc3e8c..d8d4c2a3 100644
+--- a/services/core/java/com/android/server/wm/Task.java
++++ b/services/core/java/com/android/server/wm/Task.java
+@@ -2620,6 +2620,9 @@ class Task extends TaskFragment {
+ 
+         EventLogTags.writeWmTaskRemoved(mTaskId, reason);
+         clearPinnedTaskIfNeed();
++        if (mChildPipActivity != null) {
++            mChildPipActivity.clearLastParentBeforePip();
++        }
+         // If applicable let the TaskOrganizer know the Task is vanishing.
+         setTaskOrganizer(null);
+ 
+-- 
+2.42.0
+
