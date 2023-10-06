@@ -13,6 +13,11 @@ export BUILD_HOSTNAME=android-build
 export USE_DEX2OAT_DEBUG=false
 export WITH_DEXPREOPT_DEBUG_INFO=false
 
+# goofy ahh build env
+if [[ $(cat /proc/sys/kernel/hostname) == "phenix" ]]; then
+    unset JAVAC
+fi
+
 # Defs
 LOS_VERSION=$(grep "PRODUCT_VERSION_MAJOR" $(gettop)/vendor/lineage/config/version.mk | sed 's/PRODUCT_VERSION_MAJOR = //g' | head -1)
 VENDOR_EXTRA_PATH=$(gettop)/vendor/extra
@@ -180,11 +185,6 @@ mka_build() {
         export IS_RELEASE_BUILD=False
     fi
 
-    # goofy ahh build env
-    if [[ $(hostname) == "phenix" ]]; then
-        unset JAVAC
-    fi
-
     # Build
     rm -rf out/target/product/"${DEVICE}"/lineage-*.zip &> /dev/null
     lunch lineage_"${DEVICE}"-"${BUILD_TYPE}"
@@ -232,13 +232,7 @@ mka_kernel() {
     fi
 
     # Don't push the kernel files to the public
-    sed -i "s|is_release_build = True|is_release_build = False|g" "${VENDOR_EXTRA_PATH}"/tools/releases/los_ota_json.py
-    sed -i "s|is_release_build = True|is_release_build = False|g" "${VENDOR_EXTRA_PATH}"/tools/releases/releases.py
-
-    # goofy ahh build env
-    if [[ $(hostname) == "phenix" ]]; then
-        unset JAVAC
-    fi
+    export IS_RELEASE_BUILD=False
 
     # Build
     lunch lineage_"${DEVICE}"-"${BUILD_TYPE}"
