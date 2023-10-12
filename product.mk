@@ -11,7 +11,7 @@ $(call inherit-product, vendor/extra/config/go.mk)
 $(call inherit-product, vendor/extra/external/ih8sn/product.mk)
 
 # Inherit priv Makefile
-$(call inherit-product, vendor/extra/priv/product.mk)
+$(call inherit-product-if-exists, vendor/extra/priv/product.mk)
 
 # Boot animation
 TARGET_BOOTANIMATION_HALF_RES := true
