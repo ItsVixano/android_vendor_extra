@@ -1,0 +1,27 @@
+From e694cff5dd8079db958e2fa23c8ebc7edf64b352 Mon Sep 17 00:00:00 2001
+From: Giovanni Ricca <giovanniricca@proton.me>
+Date: Wed, 19 Apr 2023 22:18:13 +0200
+Subject: [PATCH 2/2] libfmjni: Don't call `pthread_join` on `Pwr_down`
+
+* The `delete` macro already calls it
+
+Change-Id: I362551b06c5305c58a33c0a9a7b03edf1f1658b7
+---
+ FmRadioController.cpp | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/FmRadioController.cpp b/FmRadioController.cpp
+index c98fcaa..247ac41 100644
+--- a/FmRadioController.cpp
++++ b/FmRadioController.cpp
+@@ -297,7 +297,6 @@ int FmRadioController ::Pwr_Down()
+     if(event_listener_thread != 0) {
+         ALOGD("%s, event_listener_thread cancelled\n", __func__);
+         event_listener_canceled = true;
+-        pthread_join(event_listener_thread, NULL);
+     }
+     if (strcmp(value, "rome") != 0) {
+         ret = FmIoctlsInterface::close_fm_patch_dl();
+-- 
+2.40.1
+
