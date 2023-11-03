@@ -1,7 +1,7 @@
 From a6ccd69bb8e31af1b535d546257a0c7a5bde9869 Mon Sep 17 00:00:00 2001
 From: LeddaZ <leonardoledda@gmail.com>
 Date: Thu, 18 Aug 2022 13:12:05 +0200
-Subject: [PATCH 2/7] soong: Increase Java heap size for r8
+Subject: [PATCH 2/6] soong: Increase Java heap size for r8
 
 * It started OOMing randomly
 
