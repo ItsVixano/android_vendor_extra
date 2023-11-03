@@ -1,0 +1,62 @@
+From 0049d52610e8128c42401684645dcdc8a32e5b49 Mon Sep 17 00:00:00 2001
+From: jhenrique09 <jhsv09@gmail.com>
+Date: Sun, 12 Feb 2023 13:56:11 -0300
+Subject: [PATCH 5/5] AuthRippleView: Allow disabling ripple unlock animation
+ using overlay
+
+Change-Id: Ib5a1709e05ca1a405389ce0af25e7cb68c87b6ea
+---
+ packages/SystemUI/res/values/lineage_config.xml           | 3 +++
+ .../android/systemui/biometrics/AuthRippleController.kt   | 8 ++++++++
+ 2 files changed, 11 insertions(+)
+
+diff --git a/packages/SystemUI/res/values/lineage_config.xml b/packages/SystemUI/res/values/lineage_config.xml
+index c9f38c74..03604090 100644
+--- a/packages/SystemUI/res/values/lineage_config.xml
++++ b/packages/SystemUI/res/values/lineage_config.xml
+@@ -23,4 +23,7 @@
+ 
+     <!-- Doze: does the long press sensor need a proximity check? -->
+     <bool name="doze_long_press_proximity_check">false</bool>
++
++    <!-- Unlock ripple animation -->
++    <bool name="config_enableUnlockRippleAnimation">true</bool>
+ </resources>
+diff --git a/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt b/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt
+index 6f0f6331..e22e83c3 100644
+--- a/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt
++++ b/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt
+@@ -95,9 +95,11 @@ class AuthRippleController @Inject constructor(
+ 
+     private var udfpsController: UdfpsController? = null
+     private var udfpsRadius: Float = -1f
++    private var unlockAnimationEnabled: Boolean = true
+ 
+     override fun start() {
+         init()
++        unlockAnimationEnabled = sysuiContext.resources.getBoolean(R.bool.config_enableUnlockRippleAnimation)
+     }
+ 
+     @VisibleForTesting
+@@ -187,6 +189,9 @@ class AuthRippleController @Inject constructor(
+     }
+ 
+     private fun showUnlockedRipple() {
++        if (!unlockAnimationEnabled)
++            return
++
+         notificationShadeWindowController.setForcePluginOpen(true, this)
+ 
+         // This code path is not used if the KeyguardTransitionRepository is managing the light
+@@ -210,6 +215,9 @@ class AuthRippleController @Inject constructor(
+     }
+ 
+     override fun onKeyguardFadingAwayChanged() {
++        if (!unlockAnimationEnabled)
++            return
++
+         if (featureFlags.isEnabled(Flags.LIGHT_REVEAL_MIGRATION)) {
+             return
+         }
+-- 
+2.42.0
