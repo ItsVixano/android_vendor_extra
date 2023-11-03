@@ -1,0 +1,30 @@
+From b484953f846480d51bcbb72a9db77d094693d4bd Mon Sep 17 00:00:00 2001
+From: Danny Lin <danny@kdrag0n.dev>
+Date: Tue, 5 Oct 2021 19:18:48 -0700
+Subject: [PATCH 8/9] SystemUI: Reduce screenshot dismiss delay to 3 seconds
+
+3 seconds is enough in most cases. Keeping the overlay around for too
+long forces the user to dismiss it manually, which is a regression
+compared to the Android 10's screenshot notification UI.
+
+Change-Id: I38f4bfbdd88a56a4ffba225c38050f28d43fc418
+---
+ .../com/android/systemui/screenshot/ScreenshotController.java   | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/packages/SystemUI/src/com/android/systemui/screenshot/ScreenshotController.java b/packages/SystemUI/src/com/android/systemui/screenshot/ScreenshotController.java
+index 42e12c05..f4bd86db 100644
+--- a/packages/SystemUI/src/com/android/systemui/screenshot/ScreenshotController.java
++++ b/packages/SystemUI/src/com/android/systemui/screenshot/ScreenshotController.java
+@@ -263,7 +263,7 @@ public class ScreenshotController {
+     // From WizardManagerHelper.java
+     private static final String SETTINGS_SECURE_USER_SETUP_COMPLETE = "user_setup_complete";
+ 
+-    private static final int SCREENSHOT_CORNER_DEFAULT_TIMEOUT_MILLIS = 6000;
++    private static final int SCREENSHOT_CORNER_DEFAULT_TIMEOUT_MILLIS = 3000;
+ 
+     private final WindowContext mContext;
+     private final FeatureFlags mFlags;
+-- 
+2.42.0
+
