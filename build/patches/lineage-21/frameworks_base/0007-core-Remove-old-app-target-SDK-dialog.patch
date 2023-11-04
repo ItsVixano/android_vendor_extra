@@ -1,7 +1,7 @@
-From fbddaf7726fc8bc0d6127e6fa849232428cd3ed9 Mon Sep 17 00:00:00 2001
+From a66fd0c5147df99b22b191ce83946452a0cc33ec Mon Sep 17 00:00:00 2001
 From: Danny Lin <danny@kdrag0n.dev>
 Date: Tue, 3 Nov 2020 22:43:12 -0800
-Subject: [PATCH 7/9] core: Remove old app target SDK dialog
+Subject: [PATCH 07/13] core: Remove old app target SDK dialog
 
 If an app is old, users should already know that, and there's usually no
 point in warning them about it because they would already be using a
@@ -30,5 +30,5 @@ index f7ccc0d9..94ef673c 100644
  
      /**
 -- 
-2.42.0
+2.42.1
 

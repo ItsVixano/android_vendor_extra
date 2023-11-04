@@ -1,7 +1,7 @@
-From 5bb01ff8a9c0d08743db5d9f77114c9aa8355690 Mon Sep 17 00:00:00 2001
+From 201c43e637a3b53964980bdc3510c746493166cb Mon Sep 17 00:00:00 2001
 From: Jeferson <jroliveira.oliveira301@gmail.com>
 Date: Fri, 17 Jun 2022 15:04:04 +0200
-Subject: [PATCH 3/9] Revert "Ignore the charging ripple flag."
+Subject: [PATCH 03/13] Revert "Ignore the charging ripple flag."
 
 This reverts commit 575a868.
 
@@ -38,5 +38,5 @@ index 5ca36ab3..28d121da 100644
              // (which might happen just before the animation starts or right after
              // the animation ends.)
 -- 
-2.42.0
+2.42.1
 
