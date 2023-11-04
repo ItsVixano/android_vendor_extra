@@ -1,7 +1,7 @@
 From 2e7fcf846612c71b8650d5dfde1b3531602c1db7 Mon Sep 17 00:00:00 2001
 From: Danny Lin <danny@kdrag0n.dev>
 Date: Sun, 18 Jun 2023 12:23:01 +0530
-Subject: [PATCH 01/13] base: Add support for app signature spoofing
+Subject: [PATCH 01/14] base: Add support for app signature spoofing
 
 Author: Danny Lin <danny@kdrag0n.dev>
 Date:   Sat Oct 16 05:27:57 2021 -0700
