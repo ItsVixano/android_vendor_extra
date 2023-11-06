@@ -16,11 +16,6 @@ $(call inherit-product-if-exists, vendor/extra/priv/product.mk)
 # Boot animation
 TARGET_BOOTANIMATION_HALF_RES := true
 
-# LDAC
-PRODUCT_PACKAGES += \
-    libldacBT_enc \
-    libldacBT_abr
-
 # Overlays
 PRODUCT_PACKAGES += \
     WebViewOverlay \
