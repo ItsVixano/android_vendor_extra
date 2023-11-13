@@ -1,4 +1,4 @@
-From 1fe0b84feb6f49f37dee54dbd756801045543f1c Mon Sep 17 00:00:00 2001
+From afd0e0a7b82729a21c4f5df3ba42f3d0a181dc98 Mon Sep 17 00:00:00 2001
 From: Danny Lin <danny@kdrag0n.dev>
 Date: Tue, 5 Oct 2021 21:01:09 -0700
 Subject: [PATCH 14/14] SystemUI: Require unlocking to use sensitive QS tiles

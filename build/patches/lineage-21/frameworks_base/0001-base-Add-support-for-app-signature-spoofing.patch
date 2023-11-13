@@ -1,4 +1,4 @@
-From 2e7fcf846612c71b8650d5dfde1b3531602c1db7 Mon Sep 17 00:00:00 2001
+From 9521628c30eb807d1f766f7b62b5b1de3fb9d21e Mon Sep 17 00:00:00 2001
 From: Danny Lin <danny@kdrag0n.dev>
 Date: Sun, 18 Jun 2023 12:23:01 +0530
 Subject: [PATCH 01/14] base: Add support for app signature spoofing
@@ -73,7 +73,7 @@ index 288ab479..2124d89c 100644
      field public static final String MICROPHONE = "android.permission-group.MICROPHONE";
      field public static final String NEARBY_DEVICES = "android.permission-group.NEARBY_DEVICES";
 diff --git a/core/res/AndroidManifest.xml b/core/res/AndroidManifest.xml
-index 194feb84..e0f5059e 100644
+index 3c70ba87..71174d7f 100644
 --- a/core/res/AndroidManifest.xml
 +++ b/core/res/AndroidManifest.xml
 @@ -4259,6 +4259,21 @@

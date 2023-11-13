@@ -1,4 +1,4 @@
-From 7bcf689517611c406eb488d823c5f74ec3611759 Mon Sep 17 00:00:00 2001
+From a3473c65156f44a70dcdb327ae23b7cbb53a7caa Mon Sep 17 00:00:00 2001
 From: Sourajit Karmakar <sourajitk@statixos.com>
 Date: Thu, 20 Apr 2023 22:37:29 -0400
 Subject: [PATCH 13/14] hwui: Compile without no-omit-frame-pointer

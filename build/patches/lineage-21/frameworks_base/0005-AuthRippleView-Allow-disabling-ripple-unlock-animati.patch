@@ -1,4 +1,4 @@
-From 5577cbe0ce241d332d1489436178bdc82ab70245 Mon Sep 17 00:00:00 2001
+From 0f03b8a0c0ad4f1cf4019cc1a080a4dd4ea31aed Mon Sep 17 00:00:00 2001
 From: jhenrique09 <jhsv09@gmail.com>
 Date: Sun, 12 Feb 2023 13:56:11 -0300
 Subject: [PATCH 05/14] AuthRippleView: Allow disabling ripple unlock animation
@@ -6,24 +6,24 @@ Subject: [PATCH 05/14] AuthRippleView: Allow disabling ripple unlock animation
 
 Change-Id: Ib5a1709e05ca1a405389ce0af25e7cb68c87b6ea
 ---
- packages/SystemUI/res/values/lineage_config.xml           | 3 +++
- .../android/systemui/biometrics/AuthRippleController.kt   | 8 ++++++++
- 2 files changed, 11 insertions(+)
+ packages/SystemUI/res/values/lineage_config.xml            | 3 +++
+ .../android/systemui/biometrics/AuthRippleController.kt    | 7 +++++++
+ 2 files changed, 10 insertions(+)
 
 diff --git a/packages/SystemUI/res/values/lineage_config.xml b/packages/SystemUI/res/values/lineage_config.xml
-index c9f38c74..03604090 100644
+index 396d0550..8b4b21a7 100644
 --- a/packages/SystemUI/res/values/lineage_config.xml
 +++ b/packages/SystemUI/res/values/lineage_config.xml
-@@ -23,4 +23,7 @@
+@@ -26,4 +26,7 @@
  
-     <!-- Doze: does the long press sensor need a proximity check? -->
-     <bool name="doze_long_press_proximity_check">false</bool>
+     <!-- Whether usage of the proximity sensor during doze is supported -->
+     <bool name="doze_proximity_sensor_supported">true</bool>
 +
 +    <!-- Unlock ripple animation -->
 +    <bool name="config_enableUnlockRippleAnimation">true</bool>
  </resources>
 diff --git a/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt b/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt
-index 6f0f6331..e22e83c3 100644
+index 6f0f6331..4352f085 100644
 --- a/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt
 +++ b/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt
 @@ -95,9 +95,11 @@ class AuthRippleController @Inject constructor(
@@ -38,17 +38,16 @@ index 6f0f6331..e22e83c3 100644
      }
  
      @VisibleForTesting
-@@ -187,6 +189,9 @@ class AuthRippleController @Inject constructor(
+@@ -187,6 +189,8 @@ class AuthRippleController @Inject constructor(
      }
  
      private fun showUnlockedRipple() {
 +        if (!unlockAnimationEnabled)
 +            return
-+
          notificationShadeWindowController.setForcePluginOpen(true, this)
  
          // This code path is not used if the KeyguardTransitionRepository is managing the light
-@@ -210,6 +215,9 @@ class AuthRippleController @Inject constructor(
+@@ -210,6 +214,9 @@ class AuthRippleController @Inject constructor(
      }
  
      override fun onKeyguardFadingAwayChanged() {

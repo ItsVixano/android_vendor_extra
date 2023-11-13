@@ -1,4 +1,4 @@
-From e5b776a89a90c0d05b3500008909d06d38e1acd5 Mon Sep 17 00:00:00 2001
+From b5cfc10316d11298c07bb7ff3bb07c05a67d843f Mon Sep 17 00:00:00 2001
 From: Danny Lin <danny@kdrag0n.dev>
 Date: Tue, 5 Oct 2021 20:05:42 -0700
 Subject: [PATCH 09/14] SystemUI: Remove Android build number from QS footer

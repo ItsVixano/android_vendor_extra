@@ -1,4 +1,4 @@
-From 6c231d008250e1765f362cd1de843507239c6a0d Mon Sep 17 00:00:00 2001
+From 4f3d2b6bb0ea287fd96e538bc1ed635c3788e180 Mon Sep 17 00:00:00 2001
 From: Jeferson <jroliveira.oliveira301@gmail.com>
 Date: Fri, 17 Jun 2022 15:01:28 +0200
 Subject: [PATCH 04/14] base: SystemUI: Allow flags to be overrideable
