@@ -42,10 +42,10 @@ def get_device(var):
         # LineageOS 21.0
         "daisy": {1: "Mi A2 Lite", 2: "21.0", 3: "LineageOS_daisy"},
         "sakura": {1: "Redmi 6 Pro", 2: "21.0", 3: "LineageOS_sakura"},
+        "miatoll": {1: "Xiaomi Atoll Family", 2: "21.0", 3: "LineageOS_miatoll"},
         "ysl": {1: "Redmi S2/Y2", 2: "21.0", 3: "LineageOS_ysl"},
         # LineageOS 20.0
         "lisa": {1: "Xiaomi 11 Lite 5G NE", 2: "20.0", 3: "LineageOS_lisa"},
-        "miatoll": {1: "Xiaomi Atoll Family", 2: "20.0", 3: "LineageOS_miatoll"},
         "prague": {1: "Huawei P8 Lite 2017", 2: "20.0", 3: "LineageOS_prague"},
     }.get(var)
 
