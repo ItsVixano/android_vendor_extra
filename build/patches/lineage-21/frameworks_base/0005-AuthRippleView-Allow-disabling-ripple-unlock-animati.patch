@@ -1,7 +1,7 @@
-From 0f03b8a0c0ad4f1cf4019cc1a080a4dd4ea31aed Mon Sep 17 00:00:00 2001
+From 1b807e369168c738e5da61244183c7d34a104edd Mon Sep 17 00:00:00 2001
 From: jhenrique09 <jhsv09@gmail.com>
 Date: Sun, 12 Feb 2023 13:56:11 -0300
-Subject: [PATCH 05/14] AuthRippleView: Allow disabling ripple unlock animation
+Subject: [PATCH 05/15] AuthRippleView: Allow disabling ripple unlock animation
  using overlay
 
 Change-Id: Ib5a1709e05ca1a405389ce0af25e7cb68c87b6ea
@@ -11,7 +11,7 @@ Change-Id: Ib5a1709e05ca1a405389ce0af25e7cb68c87b6ea
  2 files changed, 10 insertions(+)
 
 diff --git a/packages/SystemUI/res/values/lineage_config.xml b/packages/SystemUI/res/values/lineage_config.xml
-index 396d0550..8b4b21a7 100644
+index 396d05507..8b4b21a73 100644
 --- a/packages/SystemUI/res/values/lineage_config.xml
 +++ b/packages/SystemUI/res/values/lineage_config.xml
 @@ -26,4 +26,7 @@
@@ -23,7 +23,7 @@ index 396d0550..8b4b21a7 100644
 +    <bool name="config_enableUnlockRippleAnimation">true</bool>
  </resources>
 diff --git a/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt b/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt
-index 6f0f6331..4352f085 100644
+index 6f0f6331e..4352f085b 100644
 --- a/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt
 +++ b/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt
 @@ -95,9 +95,11 @@ class AuthRippleController @Inject constructor(

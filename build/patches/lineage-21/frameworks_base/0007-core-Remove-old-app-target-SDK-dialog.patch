@@ -1,7 +1,7 @@
-From b43a2976596bc2a8645335afe0369fb5e90c760b Mon Sep 17 00:00:00 2001
+From 8099a6941088cd9a3f31880c02ac22aba30802a8 Mon Sep 17 00:00:00 2001
 From: Danny Lin <danny@kdrag0n.dev>
 Date: Tue, 3 Nov 2020 22:43:12 -0800
-Subject: [PATCH 07/14] core: Remove old app target SDK dialog
+Subject: [PATCH 07/15] core: Remove old app target SDK dialog
 
 If an app is old, users should already know that, and there's usually no
 point in warning them about it because they would already be using a
@@ -17,7 +17,7 @@ Change-Id: I1a3021f0f9bec1ab6ff7641776391e1bd4c3cc49
  1 file changed, 2 deletions(-)
 
 diff --git a/services/core/java/com/android/server/wm/AppWarnings.java b/services/core/java/com/android/server/wm/AppWarnings.java
-index f7ccc0d9..94ef673c 100644
+index f7ccc0d91..94ef673c1 100644
 --- a/services/core/java/com/android/server/wm/AppWarnings.java
 +++ b/services/core/java/com/android/server/wm/AppWarnings.java
 @@ -211,8 +211,6 @@ class AppWarnings {

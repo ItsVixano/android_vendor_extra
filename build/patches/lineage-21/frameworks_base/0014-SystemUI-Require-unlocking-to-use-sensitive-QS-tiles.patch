@@ -1,7 +1,7 @@
-From afd0e0a7b82729a21c4f5df3ba42f3d0a181dc98 Mon Sep 17 00:00:00 2001
+From d96e4ac5801205f2efa485b3f014976619bac972 Mon Sep 17 00:00:00 2001
 From: Danny Lin <danny@kdrag0n.dev>
 Date: Tue, 5 Oct 2021 21:01:09 -0700
-Subject: [PATCH 14/14] SystemUI: Require unlocking to use sensitive QS tiles
+Subject: [PATCH 14/15] SystemUI: Require unlocking to use sensitive QS tiles
 
 - Airplane mode
 - Battery saver
@@ -94,7 +94,7 @@ Signed-off-by: spezi77 <spezi7713@gmx.net>
  create mode 100644 packages/SystemUI/src/com/android/systemui/qs/tiles/SecureQSTile.kt
 
 diff --git a/packages/SystemUI/src/com/android/systemui/qs/tiles/AirplaneModeTile.java b/packages/SystemUI/src/com/android/systemui/qs/tiles/AirplaneModeTile.java
-index 30765f7f..8788c986 100644
+index 30765f7f9..8788c9867 100644
 --- a/packages/SystemUI/src/com/android/systemui/qs/tiles/AirplaneModeTile.java
 +++ b/packages/SystemUI/src/com/android/systemui/qs/tiles/AirplaneModeTile.java
 @@ -50,6 +50,7 @@ import com.android.systemui.qs.SettingObserver;
@@ -145,7 +145,7 @@ index 30765f7f..8788c986 100644
          MetricsLogger.action(mContext, getMetricsCategory(), !airplaneModeEnabled);
          if (!airplaneModeEnabled && TelephonyProperties.in_ecm_mode().orElse(false)) {
 diff --git a/packages/SystemUI/src/com/android/systemui/qs/tiles/BatterySaverTile.java b/packages/SystemUI/src/com/android/systemui/qs/tiles/BatterySaverTile.java
-index a444e763..780ab99f 100644
+index a444e7631..780ab99f2 100644
 --- a/packages/SystemUI/src/com/android/systemui/qs/tiles/BatterySaverTile.java
 +++ b/packages/SystemUI/src/com/android/systemui/qs/tiles/BatterySaverTile.java
 @@ -42,11 +42,12 @@ import com.android.systemui.qs.SettingObserver;
@@ -190,7 +190,7 @@ index a444e763..780ab99f 100644
              return;
          }
 diff --git a/packages/SystemUI/src/com/android/systemui/qs/tiles/BluetoothTile.java b/packages/SystemUI/src/com/android/systemui/qs/tiles/BluetoothTile.java
-index 30218a6a..dfced7c1 100644
+index 30218a6a3..dfced7c1c 100644
 --- a/packages/SystemUI/src/com/android/systemui/qs/tiles/BluetoothTile.java
 +++ b/packages/SystemUI/src/com/android/systemui/qs/tiles/BluetoothTile.java
 @@ -51,6 +51,7 @@ import com.android.systemui.qs.QsEventLogger;
@@ -238,7 +238,7 @@ index 30218a6a..dfced7c1 100644
          final boolean isEnabled = mState.value;
          // Immediately enter transient enabling state when turning bluetooth on.
 diff --git a/packages/SystemUI/src/com/android/systemui/qs/tiles/DataSaverTile.java b/packages/SystemUI/src/com/android/systemui/qs/tiles/DataSaverTile.java
-index e769b5ef..64447032 100644
+index e769b5ef9..644470320 100644
 --- a/packages/SystemUI/src/com/android/systemui/qs/tiles/DataSaverTile.java
 +++ b/packages/SystemUI/src/com/android/systemui/qs/tiles/DataSaverTile.java
 @@ -43,10 +43,11 @@ import com.android.systemui.qs.logging.QSLogger;
@@ -282,7 +282,7 @@ index e769b5ef..64447032 100644
                  || Prefs.getBoolean(mContext, Prefs.Key.QS_DATA_SAVER_DIALOG_SHOWN, false)) {
              // Do it right away.
 diff --git a/packages/SystemUI/src/com/android/systemui/qs/tiles/HotspotTile.java b/packages/SystemUI/src/com/android/systemui/qs/tiles/HotspotTile.java
-index 4c3699ce..53a8b452 100644
+index 4c3699ced..53a8b452f 100644
 --- a/packages/SystemUI/src/com/android/systemui/qs/tiles/HotspotTile.java
 +++ b/packages/SystemUI/src/com/android/systemui/qs/tiles/HotspotTile.java
 @@ -46,11 +46,12 @@ import com.android.systemui.qs.logging.QSLogger;
@@ -327,7 +327,7 @@ index 4c3699ce..53a8b452 100644
          if (!isEnabled && mDataSaverController.isDataSaverEnabled()) {
              return;
 diff --git a/packages/SystemUI/src/com/android/systemui/qs/tiles/NfcTile.java b/packages/SystemUI/src/com/android/systemui/qs/tiles/NfcTile.java
-index 7baf40d0..68cb140d 100644
+index 7baf40d01..68cb140da 100644
 --- a/packages/SystemUI/src/com/android/systemui/qs/tiles/NfcTile.java
 +++ b/packages/SystemUI/src/com/android/systemui/qs/tiles/NfcTile.java
 @@ -46,11 +46,12 @@ import com.android.systemui.qs.QSHost;
@@ -372,7 +372,7 @@ index 7baf40d0..68cb140d 100644
              return;
          }
 diff --git a/packages/SystemUI/src/com/android/systemui/qs/tiles/RotationLockTile.java b/packages/SystemUI/src/com/android/systemui/qs/tiles/RotationLockTile.java
-index 2d9f7dd0..21eeb6aa 100644
+index 2d9f7dd03..21eeb6aa8 100644
 --- a/packages/SystemUI/src/com/android/systemui/qs/tiles/RotationLockTile.java
 +++ b/packages/SystemUI/src/com/android/systemui/qs/tiles/RotationLockTile.java
 @@ -49,6 +49,7 @@ import com.android.systemui.qs.SettingObserver;
@@ -421,7 +421,7 @@ index 2d9f7dd0..21eeb6aa 100644
          refreshState(newState);
 diff --git a/packages/SystemUI/src/com/android/systemui/qs/tiles/SecureQSTile.kt b/packages/SystemUI/src/com/android/systemui/qs/tiles/SecureQSTile.kt
 new file mode 100644
-index 00000000..d46eea6d
+index 000000000..d46eea6da
 --- /dev/null
 +++ b/packages/SystemUI/src/com/android/systemui/qs/tiles/SecureQSTile.kt
 @@ -0,0 +1,59 @@
@@ -485,7 +485,7 @@ index 00000000..d46eea6d
 +    }
 +}
 diff --git a/packages/SystemUI/src/com/android/systemui/qs/tiles/WorkModeTile.java b/packages/SystemUI/src/com/android/systemui/qs/tiles/WorkModeTile.java
-index 17e72e59..5f948fb8 100644
+index 17e72e597..5f948fb8c 100644
 --- a/packages/SystemUI/src/com/android/systemui/qs/tiles/WorkModeTile.java
 +++ b/packages/SystemUI/src/com/android/systemui/qs/tiles/WorkModeTile.java
 @@ -44,11 +44,12 @@ import com.android.systemui.qs.QsEventLogger;

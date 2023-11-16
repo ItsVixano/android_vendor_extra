@@ -1,7 +1,7 @@
-From 6e4454264b41cfe182aedb21d208a6e70471f027 Mon Sep 17 00:00:00 2001
+From d0f875626bd837518778c046d6ae2d00027a64b0 Mon Sep 17 00:00:00 2001
 From: 00day0 <therandomuser11@gmail.com>
 Date: Tue, 10 Jan 2023 19:50:47 +0000
-Subject: [PATCH 02/14] Revert "Update Media Seekbar Thumb Shape"
+Subject: [PATCH 02/15] Revert "Update Media Seekbar Thumb Shape"
 
 This reverts commit fe8cdfc0c8042b7118bc353f843f7b94d1fd4822.
 
@@ -14,7 +14,7 @@ Change-Id: Iad5516c513a75c1db82f721edb6e4f4c647abe35
 
 diff --git a/packages/SystemUI/res/drawable/media_seekbar_thumb.xml b/packages/SystemUI/res/drawable/media_seekbar_thumb.xml
 deleted file mode 100644
-index 5eb2bfdb..00000000
+index 5eb2bfdbe..000000000
 --- a/packages/SystemUI/res/drawable/media_seekbar_thumb.xml
 +++ /dev/null
 @@ -1,50 +0,0 @@
@@ -69,7 +69,7 @@ index 5eb2bfdb..00000000
 -    </target>
 -</animated-vector>
 diff --git a/packages/SystemUI/res/values/styles.xml b/packages/SystemUI/res/values/styles.xml
-index cb5342a0..3d1e3f0f 100644
+index cb5342a0d..3d1e3f0f1 100644
 --- a/packages/SystemUI/res/values/styles.xml
 +++ b/packages/SystemUI/res/values/styles.xml
 @@ -620,7 +620,6 @@

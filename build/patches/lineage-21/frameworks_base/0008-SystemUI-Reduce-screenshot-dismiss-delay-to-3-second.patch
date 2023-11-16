@@ -1,7 +1,7 @@
-From 31f46b598eb716957e7c72d58e45d1fa0f51d2b1 Mon Sep 17 00:00:00 2001
+From 045ba74a6d971fc7cd1ee0e4a0b2580e6af657e9 Mon Sep 17 00:00:00 2001
 From: Danny Lin <danny@kdrag0n.dev>
 Date: Tue, 5 Oct 2021 19:18:48 -0700
-Subject: [PATCH 08/14] SystemUI: Reduce screenshot dismiss delay to 3 seconds
+Subject: [PATCH 08/15] SystemUI: Reduce screenshot dismiss delay to 3 seconds
 
 3 seconds is enough in most cases. Keeping the overlay around for too
 long forces the user to dismiss it manually, which is a regression
@@ -13,7 +13,7 @@ Change-Id: I38f4bfbdd88a56a4ffba225c38050f28d43fc418
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/packages/SystemUI/src/com/android/systemui/screenshot/ScreenshotController.java b/packages/SystemUI/src/com/android/systemui/screenshot/ScreenshotController.java
-index 42e12c05..f4bd86db 100644
+index 42e12c059..f4bd86db5 100644
 --- a/packages/SystemUI/src/com/android/systemui/screenshot/ScreenshotController.java
 +++ b/packages/SystemUI/src/com/android/systemui/screenshot/ScreenshotController.java
 @@ -263,7 +263,7 @@ public class ScreenshotController {
