@@ -7,9 +7,6 @@
 # Inherit Android Go Makefile
 $(call inherit-product, vendor/extra/config/go.mk)
 
-# Inherit ih8sn Makefile
-$(call inherit-product, vendor/extra/external/ih8sn/product.mk)
-
 # Inherit priv Makefile
 $(call inherit-product-if-exists, vendor/extra/priv/product.mk)
 
