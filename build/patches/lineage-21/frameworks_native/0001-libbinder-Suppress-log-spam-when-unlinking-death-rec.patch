@@ -1,7 +1,8 @@
-From 93ce0471a6875baafbcf16fde036c228f1cc9f2e Mon Sep 17 00:00:00 2001
+From 3291d6147bf7087be440f4c9122f32227ef5e327 Mon Sep 17 00:00:00 2001
 From: Danny Lin <danny@kdrag0n.dev>
 Date: Mon, 5 Apr 2021 22:26:06 -0700
-Subject: [PATCH] libbinder: Suppress log spam when unlinking death recipients
+Subject: [PATCH 1/2] libbinder: Suppress log spam when unlinking death
+ recipients
 
 Unlinking death recipients (from linkToDeath) is a normal part of Binder
 operation, and doing it when a BpBinder's refcount has reached 0 is not
@@ -26,7 +27,7 @@ Change-Id: I774d0c59ca6f70a4e2ed33b9fac3fb5b86d8ff0a
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/libs/binder/BpBinder.cpp b/libs/binder/BpBinder.cpp
-index 8d9955dd6b..d832746fda 100644
+index 8d9955d..d832746 100644
 --- a/libs/binder/BpBinder.cpp
 +++ b/libs/binder/BpBinder.cpp
 @@ -646,7 +646,7 @@ void BpBinder::onLastStrongRef(const void* /*id*/) {
@@ -39,5 +40,5 @@ index 8d9955dd6b..d832746fda 100644
          }
  
 -- 
-2.42.0
+2.43.0
 
