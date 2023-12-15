@@ -44,6 +44,7 @@ def get_device(var):
         "sakura": {1: "Redmi 6 Pro", 2: "21.0", 3: "LineageOS_sakura"},
         "miatoll": {1: "Xiaomi Atoll Family", 2: "21.0", 3: "LineageOS_miatoll"},
         "ysl": {1: "Redmi S2/Y2", 2: "21.0", 3: "LineageOS_ysl"},
+        "xaga": {1: "POCO X4 GT", 2: "21.0", 3: "LineageOS_xaga"},
         # LineageOS 20.0
         "lisa": {1: "Xiaomi 11 Lite 5G NE", 2: "20.0", 3: "LineageOS_lisa"},
         "prague": {1: "Huawei P8 Lite 2017", 2: "20.0", 3: "LineageOS_prague"},
