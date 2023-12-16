@@ -13,6 +13,9 @@ export BUILD_HOSTNAME=android-build
 export USE_DEX2OAT_DEBUG=false
 export WITH_DEXPREOPT_DEBUG_INFO=false
 
+# Hardcode High Memory Parallel Process
+export NINJA_HIGHMEM_NUM_JOBS=1
+
 # goofy ahh build env
 if [[ $(cat /proc/sys/kernel/hostname) == "phenix" ]]; then
     unset JAVAC
