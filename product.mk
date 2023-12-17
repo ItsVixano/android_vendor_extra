@@ -19,6 +19,10 @@ PRODUCT_PACKAGES += \
     LineageUpdaterOverlay$(PRODUCT_VERSION_MAJOR) \
     RippleSystemUIOverlay
 
+# RemovePackages
+PRODUCT_PACKAGES += \
+    RemovePackages
+
 # Rootdir
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/rootdir/bin/neofetch:$(TARGET_COPY_OUT_SYSTEM)/bin/neofetch
