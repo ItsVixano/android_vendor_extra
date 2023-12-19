@@ -1,0 +1,1492 @@
+From 199f92b544c1fcf396941d3391591cec828ae12b Mon Sep 17 00:00:00 2001
+From: johnny <johnny@localhost>
+Date: Wed, 22 Jun 2022 15:47:10 +0200
+Subject: [PATCH 2/2] LatinIME: fix gesture typing
+
+Co-authored-by: nift4 <nift4@protonmail.com>
+Change-Id: I11344e95e32566507f937d6b72b6212e3cba2220
+Signed-off-by: Mohammad Hasan Keramat J <ikeramat@protonmail.com>
+---
+ java/.gitignore                               |   8 +
+ native/jni/Android.bp                         |   9 +-
+ native/jni/src/defines.h                      |   1 +
+ .../jni/src/suggest/core/policy/traversal.h   |   2 +
+ .../jni/src/suggest/core/policy/weighting.cpp |  61 ++++++
+ .../jni/src/suggest/core/policy/weighting.h   |  12 ++
+ .../core/result/suggestions_output_utils.cpp  |  83 ++++++++
+ .../core/result/suggestions_output_utils.h    |  10 +
+ .../core/session/dic_traverse_session.cpp     |   3 +-
+ native/jni/src/suggest/core/suggest.cpp       | 177 +++++++++++++++-
+ native/jni/src/suggest/core/suggest.h         |   9 +
+ .../policyimpl/gesture/gesture_scoring.cpp    |  10 +
+ .../policyimpl/gesture/gesture_scoring.h      | 108 ++++++++++
+ .../gesture/gesture_suggest_policy.cpp        |  10 +
+ .../gesture/gesture_suggest_policy.h          |  50 +++++
+ .../gesture_suggest_policy_factory.cpp        |  21 --
+ .../gesture/gesture_suggest_policy_factory.h  |  23 +--
+ .../policyimpl/gesture/gesture_traversal.cpp  |  10 +
+ .../policyimpl/gesture/gesture_traversal.h    | 190 +++++++++++++++++
+ .../policyimpl/gesture/gesture_weighting.cpp  |  97 +++++++++
+ .../policyimpl/gesture/gesture_weighting.h    | 194 ++++++++++++++++++
+ .../policyimpl/gesture/scoring_params_g.cpp   |  30 +++
+ .../policyimpl/gesture/scoring_params_g.h     |  35 ++++
+ .../policyimpl/typing/typing_traversal.h      |   5 +
+ .../policyimpl/typing/typing_weighting.h      |   5 +
+ 25 files changed, 1115 insertions(+), 48 deletions(-)
+ create mode 100644 java/.gitignore
+ create mode 100644 native/jni/src/suggest/policyimpl/gesture/gesture_scoring.cpp
+ create mode 100644 native/jni/src/suggest/policyimpl/gesture/gesture_scoring.h
+ create mode 100644 native/jni/src/suggest/policyimpl/gesture/gesture_suggest_policy.cpp
+ create mode 100644 native/jni/src/suggest/policyimpl/gesture/gesture_suggest_policy.h
+ delete mode 100644 native/jni/src/suggest/policyimpl/gesture/gesture_suggest_policy_factory.cpp
+ create mode 100644 native/jni/src/suggest/policyimpl/gesture/gesture_traversal.cpp
+ create mode 100644 native/jni/src/suggest/policyimpl/gesture/gesture_traversal.h
+ create mode 100644 native/jni/src/suggest/policyimpl/gesture/gesture_weighting.cpp
+ create mode 100644 native/jni/src/suggest/policyimpl/gesture/gesture_weighting.h
+ create mode 100644 native/jni/src/suggest/policyimpl/gesture/scoring_params_g.cpp
+ create mode 100644 native/jni/src/suggest/policyimpl/gesture/scoring_params_g.h
+
+diff --git a/java/.gitignore b/java/.gitignore
+new file mode 100644
+index 000000000..f3f41b81a
+--- /dev/null
++++ b/java/.gitignore
+@@ -0,0 +1,8 @@
++# Eclipse project
++.classpath
++.project
++
++# IntelliJ project
++.idea
++*.iml
++*.ipr
+diff --git a/native/jni/Android.bp b/native/jni/Android.bp
+index ab14632f8..675f86ce2 100644
+--- a/native/jni/Android.bp
++++ b/native/jni/Android.bp
+@@ -81,7 +81,7 @@ filegroup {
+         "src/suggest/core/session/dic_traverse_session.cpp",
+         "src/suggest/core/result/suggestion_results.cpp",
+         "src/suggest/core/result/suggestions_output_utils.cpp",
+-        "src/suggest/policyimpl/gesture/gesture_suggest_policy_factory.cpp",
++        //"src/suggest/policyimpl/gesture/gesture_suggest_policy_factory.cpp",
+         "src/suggest/policyimpl/typing/scoring_params.cpp",
+         "src/suggest/policyimpl/typing/typing_scoring.cpp",
+         "src/suggest/policyimpl/typing/typing_suggest_policy.cpp",
+@@ -93,6 +93,13 @@ filegroup {
+         "src/utils/log_utils.cpp",
+         "src/utils/time_keeper.cpp",
+ 
++	// Gesture
++        "src/suggest/policyimpl/gesture/gesture_scoring.cpp",
++        "src/suggest/policyimpl/gesture/gesture_suggest_policy.cpp",
++        "src/suggest/policyimpl/gesture/gesture_traversal.cpp",
++        "src/suggest/policyimpl/gesture/gesture_weighting.cpp",
++        "src/suggest/policyimpl/gesture/scoring_params_g.cpp",
++
+         // BACKWARD_V402
+         "src/dictionary/structure/backward/v402/ver4_dict_buffers.cpp",
+         "src/dictionary/structure/backward/v402/ver4_dict_constants.cpp",
+diff --git a/native/jni/src/defines.h b/native/jni/src/defines.h
+index 1531b6cbe..86854529d 100644
+--- a/native/jni/src/defines.h
++++ b/native/jni/src/defines.h
+@@ -338,5 +338,6 @@ typedef enum {
+     CT_NEW_WORD_SPACE_OMISSION,
+     // Create new word with space substitution
+     CT_NEW_WORD_SPACE_SUBSTITUTION,
++    CT_SKIP,
+ } CorrectionType;
+ #endif // LATINIME_DEFINES_H
+diff --git a/native/jni/src/suggest/core/policy/traversal.h b/native/jni/src/suggest/core/policy/traversal.h
+index 5b6616d9a..42fb40e78 100644
+--- a/native/jni/src/suggest/core/policy/traversal.h
++++ b/native/jni/src/suggest/core/policy/traversal.h
+@@ -30,6 +30,8 @@ class Traversal {
+     virtual bool isOmission(const DicTraverseSession *const traverseSession,
+             const DicNode *const dicNode, const DicNode *const childDicNode,
+             const bool allowsErrorCorrections) const = 0;
++    virtual bool isSkip(const DicTraverseSession *const traverseSession,
++            const DicNode *const dicNode) const = 0;
+     virtual bool isSpaceSubstitutionTerminal(const DicTraverseSession *const traverseSession,
+             const DicNode *const dicNode) const = 0;
+     virtual bool isSpaceOmissionTerminal(const DicTraverseSession *const traverseSession,
+diff --git a/native/jni/src/suggest/core/policy/weighting.cpp b/native/jni/src/suggest/core/policy/weighting.cpp
+index 450203d98..368db04dd 100644
+--- a/native/jni/src/suggest/core/policy/weighting.cpp
++++ b/native/jni/src/suggest/core/policy/weighting.cpp
+@@ -134,6 +134,8 @@ static inline void profile(const CorrectionType correctionType, DicNode *const n
+         return weighting->getInsertionCost(traverseSession, parentDicNode, dicNode);
+     case CT_TRANSPOSITION:
+         return weighting->getTranspositionCost(traverseSession, parentDicNode, dicNode);
++    case CT_SKIP:
++        return weighting->getSkipCost(traverseSession, dicNode);
+     default:
+         return 0.0f;
+     }
+@@ -199,8 +201,67 @@ static inline void profile(const CorrectionType correctionType, DicNode *const n
+             return 2; /* look ahead + skip the current char */
+         case CT_TRANSPOSITION:
+             return 2; /* look ahead + skip the current char */
++        case CT_SKIP:
++            return 1;
+         default:
+             return 0;
+     }
+ }
++
++
++    /* static */ void Weighting::addCostAndForwardInputIndexGesture(const Weighting *const weighting,
++                                                                    const CorrectionType correctionType, const DicTraverseSession *const traverseSession,
++                                                                    const DicNode *const parentDicNode, DicNode *const dicNode,
++                                                                    MultiBigramMap *const multiBigramMap) {
++        const int inputSize = traverseSession->getInputSize();
++        DicNode_InputStateG inputStateG;
++        inputStateG.mNeedsToUpdateInputStateG = false; // Don't use input info by default
++        const float spatialCost = Weighting::getSpatialCost(weighting, correctionType,
++                                                            traverseSession, parentDicNode, dicNode, &inputStateG);
++        const float languageCost = Weighting::getLanguageCostGesture(weighting, correctionType,
++                                                                     traverseSession, parentDicNode, dicNode, multiBigramMap);
++        const ErrorTypeUtils::ErrorType errorType = weighting->getErrorType(correctionType,
++                                                                            traverseSession, parentDicNode, dicNode);
++        if (inputStateG.mNeedsToUpdateInputStateG) {
++            dicNode->updateInputIndexG(&inputStateG);
++        } else {
++            dicNode->forwardInputIndex(0 /*pointerId*/, getForwardInputCount(correctionType), false);
++        }
++        dicNode->addCost(spatialCost, languageCost, weighting->needsToNormalizeCompoundDistance(),
++                         inputSize, errorType);
++    }
++
++    /* static */ float Weighting::getLanguageCostGesture(const Weighting *const weighting,
++                                                         const CorrectionType correctionType, const DicTraverseSession *const traverseSession,
++                                                         const DicNode *const parentDicNode, const DicNode *const dicNode,
++                                                         MultiBigramMap *const multiBigramMap) {
++        switch(correctionType) {
++            case CT_OMISSION:
++                return 0.0f;
++            case CT_SUBSTITUTION:
++                return 0.0f;
++            case CT_NEW_WORD_SPACE_OMISSION:
++                return 0;
++            case CT_MATCH:
++                return 0.0f;
++            case CT_COMPLETION:
++                return 0.0f;
++            case CT_TERMINAL: {
++                const float languageImprobability =
++                        DicNodeUtils::getBigramNodeImprobability(
++                                traverseSession->getDictionaryStructurePolicy(), dicNode, multiBigramMap);
++                return weighting->getTerminalLanguageCost(traverseSession, dicNode, languageImprobability);
++            }
++            case CT_TERMINAL_INSERTION:
++                return 0.0f;
++            case CT_NEW_WORD_SPACE_SUBSTITUTION:
++                return 0;
++            case CT_INSERTION:
++                return 0.0f;
++            case CT_TRANSPOSITION:
++                return 0.0f;
++            default:
++                return 0.0f;
++        }
++    }
+ }  // namespace latinime
+diff --git a/native/jni/src/suggest/core/policy/weighting.h b/native/jni/src/suggest/core/policy/weighting.h
+index 863c4eabe..dc437b3cb 100644
+--- a/native/jni/src/suggest/core/policy/weighting.h
++++ b/native/jni/src/suggest/core/policy/weighting.h
+@@ -34,6 +34,11 @@ class Weighting {
+             const DicTraverseSession *const traverseSession,
+             const DicNode *const parentDicNode, DicNode *const dicNode,
+             MultiBigramMap *const multiBigramMap);
++    static void addCostAndForwardInputIndexGesture(const Weighting *const weighting,
++            const CorrectionType correctionType,
++            const DicTraverseSession *const traverseSession,
++            const DicNode *const parentDicNode, DicNode *const dicNode,
++            MultiBigramMap *const multiBigramMap);
+ 
+  protected:
+     virtual float getTerminalSpatialCost(const DicTraverseSession *const traverseSession,
+@@ -85,6 +90,9 @@ class Weighting {
+     virtual float getSpaceSubstitutionCost(const DicTraverseSession *const traverseSession,
+             const DicNode *const dicNode) const = 0;
+ 
++    virtual float getSkipCost(const DicTraverseSession *const traverseSession,
++                              const DicNode *const dicNode) const = 0;
++
+     virtual ErrorTypeUtils::ErrorType getErrorType(const CorrectionType correctionType,
+             const DicTraverseSession *const traverseSession,
+             const DicNode *const parentDicNode, const DicNode *const dicNode) const = 0;
+@@ -103,6 +111,10 @@ class Weighting {
+             const CorrectionType correctionType, const DicTraverseSession *const traverseSession,
+             const DicNode *const parentDicNode, const DicNode *const dicNode,
+             MultiBigramMap *const multiBigramMap);
++    static float getLanguageCostGesture(const Weighting *const weighting,
++            const CorrectionType correctionType, const DicTraverseSession *const traverseSession,
++            const DicNode *const parentDicNode, const DicNode *const dicNode,
++            MultiBigramMap *const multiBigramMap);
+     // TODO: Move to TypingWeighting and GestureWeighting?
+     static int getForwardInputCount(const CorrectionType correctionType);
+ };
+diff --git a/native/jni/src/suggest/core/result/suggestions_output_utils.cpp b/native/jni/src/suggest/core/result/suggestions_output_utils.cpp
+index 7c37241de..2312c7cfb 100644
+--- a/native/jni/src/suggest/core/result/suggestions_output_utils.cpp
++++ b/native/jni/src/suggest/core/result/suggestions_output_utils.cpp
+@@ -27,11 +27,94 @@
+ #include "suggest/core/result/suggestion_results.h"
+ #include "suggest/core/session/dic_traverse_session.h"
+ #include "suggest/core/suggest_options.h"
++#include "defines.h"
+ 
+ namespace latinime {
+ 
+ const int SuggestionsOutputUtils::MIN_LEN_FOR_MULTI_WORD_AUTOCORRECT = 16;
+ 
++    /* static */ void SuggestionsOutputUtils::outputSuggestionsGesture(
++            const Scoring *const scoringPolicy, DicTraverseSession *traverseSession,
++            const float weightOfLangModelVsSpatialModel,
++            SuggestionResults *const outSuggestionResults) {
++#if DEBUG_EVALUATE_MOST_PROBABLE_STRING
++        const int terminalSize = 0;
++#else
++        const int terminalSize = traverseSession->getDicTraverseCache()->terminalSize();
++#endif
++        std::vector<DicNode> terminals(terminalSize);
++        for (int index = terminalSize - 1; index >= 0; --index) {
++            traverseSession->getDicTraverseCache()->popTerminal(&terminals[index]);
++        }
++
++        const bool outputSecondWordFirstLetterInputIndex =
++                traverseSession->isOnlyOnePointerUsed(0 /* pointerId */);
++        const bool boostExactMatches = traverseSession->getDictionaryStructurePolicy()->
++                getHeaderStructurePolicy()->shouldBoostExactMatches();
++
++        // Output suggestion results here
++        for (auto &terminalDicNode : terminals) {
++            outputSuggestionsOfDicNodeGesture(scoringPolicy, traverseSession, &terminalDicNode,
++                                       1.0, boostExactMatches,
++                                       false, outputSecondWordFirstLetterInputIndex, outSuggestionResults);
++        }
++    }
++
++    /* static */ void SuggestionsOutputUtils::outputSuggestionsOfDicNodeGesture(
++            const Scoring *const scoringPolicy, DicTraverseSession *traverseSession,
++            const DicNode *const terminalDicNode, const float weightOfLangModelVsSpatialModel,
++            const bool boostExactMatches, const bool forceCommitMultiWords,
++            const bool outputSecondWordFirstLetterInputIndex,
++            SuggestionResults *const outSuggestionResults) {
++
++
++        const WordAttributes wordAttributes = traverseSession->getDictionaryStructurePolicy()
++                ->getWordAttributesInContext(terminalDicNode->getPrevWordIds(),
++                                             terminalDicNode->getWordId(), nullptr /* multiBigramMap */);
++        const bool isExactMatch =
++                ErrorTypeUtils::isExactMatch(terminalDicNode->getContainedErrorTypes());
++        const bool isExactMatchWithIntentionalOmission =
++                ErrorTypeUtils::isExactMatchWithIntentionalOmission(
++                        terminalDicNode->getContainedErrorTypes());
++        // TODO: Decide whether the word should be auto-corrected or not here.
++        const bool isAppropriateForAutoCorrection = !ErrorTypeUtils::isMissingExplicitAccent(
++                terminalDicNode->getContainedErrorTypes());
++        const int outputTypeFlags =
++                (wordAttributes.isPossiblyOffensive() ? Dictionary::KIND_FLAG_POSSIBLY_OFFENSIVE : 0)
++                | ((isExactMatch && boostExactMatches) ? Dictionary::KIND_FLAG_EXACT_MATCH : 0)
++                | (isExactMatchWithIntentionalOmission ?
++                   Dictionary::KIND_FLAG_EXACT_MATCH_WITH_INTENTIONAL_OMISSION : 0)
++                | (isAppropriateForAutoCorrection ?
++                   Dictionary::KIND_FLAG_APPROPRIATE_FOR_AUTOCORRECTION : 0);
++        // Entries that are blacklisted or do not represent a word should not be output.
++        const bool isValidWord = !(wordAttributes.isBlacklisted() || wordAttributes.isNotAWord());
++
++        const bool shouldBlockThisWord = shouldBlockWord(traverseSession->getSuggestOptions(),
++                                                         terminalDicNode, wordAttributes, true /* isLastWord */);
++
++        // Increase output score of top typing suggestion to ensure autocorrection.
++        // TODO: Better integration with java side autocorrection logic.
++        const float compoundDistance = terminalDicNode->getCompoundDistance(1);
++        const int finalScore = compoundDistance * -10000.0f;
++
++        // Don't output invalid or blocked offensive words. However, we still need to submit their
++        // shortcuts if any.
++        if (isValidWord && !shouldBlockThisWord) {
++            int codePoints[MAX_WORD_LENGTH];
++            terminalDicNode->outputResult(codePoints);
++            const int indexToPartialCommit = outputSecondWordFirstLetterInputIndex ?
++                                             terminalDicNode->getSecondWordFirstInputIndex(
++                                                     traverseSession->getProximityInfoState(0)) :
++                                             NOT_AN_INDEX;
++
++            outSuggestionResults->addSuggestion(codePoints,
++                                                terminalDicNode->getTotalNodeCodePointCount(),
++                                                finalScore, Dictionary::KIND_CORRECTION | outputTypeFlags,
++                                                indexToPartialCommit, computeFirstWordConfidence(terminalDicNode));
++        }
++
++    }
++
+ /* static */ void SuggestionsOutputUtils::outputSuggestions(
+         const Scoring *const scoringPolicy, DicTraverseSession *traverseSession,
+         const float weightOfLangModelVsSpatialModel,
+diff --git a/native/jni/src/suggest/core/result/suggestions_output_utils.h b/native/jni/src/suggest/core/result/suggestions_output_utils.h
+index bcb75a483..fc0d04e10 100644
+--- a/native/jni/src/suggest/core/result/suggestions_output_utils.h
++++ b/native/jni/src/suggest/core/result/suggestions_output_utils.h
+@@ -45,12 +45,22 @@ class SuggestionsOutputUtils {
+             DicTraverseSession *traverseSession, const float weightOfLangModelVsSpatialModel,
+             SuggestionResults *const outSuggestionResults);
+ 
++    static void outputSuggestionsGesture(const Scoring *const scoringPolicy,
++            DicTraverseSession *traverseSession, const float weightOfLangModelVsSpatialModel,
++            SuggestionResults *const outSuggestionResults);
++
+  private:
+     DISALLOW_IMPLICIT_CONSTRUCTORS(SuggestionsOutputUtils);
+ 
+     // Inputs longer than this will autocorrect if the suggestion is multi-word
+     static const int MIN_LEN_FOR_MULTI_WORD_AUTOCORRECT;
+ 
++    static void outputSuggestionsOfDicNodeGesture(const Scoring *const scoringPolicy,
++           DicTraverseSession *traverseSession, const DicNode *const terminalDicNode,
++           const float weightOfLangModelVsSpatialModel, const bool boostExactMatches,
++           const bool forceCommitMultiWords, const bool outputSecondWordFirstLetterInputIndex,
++           SuggestionResults *const outSuggestionResults);
++
+     static void outputSuggestionsOfDicNode(const Scoring *const scoringPolicy,
+             DicTraverseSession *traverseSession, const DicNode *const terminalDicNode,
+             const float weightOfLangModelVsSpatialModel, const bool boostExactMatches,
+diff --git a/native/jni/src/suggest/core/session/dic_traverse_session.cpp b/native/jni/src/suggest/core/session/dic_traverse_session.cpp
+index d7dd5a02d..4dc0e3853 100644
+--- a/native/jni/src/suggest/core/session/dic_traverse_session.cpp
++++ b/native/jni/src/suggest/core/session/dic_traverse_session.cpp
+@@ -66,7 +66,8 @@ void DicTraverseSession::initializeProximityInfoStates(const int *const inputCod
+         const int maxPointerCount) {
+     ASSERT(1 <= maxPointerCount && maxPointerCount <= MAX_POINTER_COUNT_G);
+     mInputSize = 0;
+-    for (int i = 0; i < maxPointerCount; ++i) {
++    // change MAX_POINTER_COUNT_G to MAX_POINTER_COUNT, not support 2 pointers
++    for (int i = 0; i < MAX_POINTER_COUNT; ++i) {
+         mProximityInfoStates[i].initInputParams(i, maxSpatialDistance, getProximityInfo(),
+                 inputCodePoints, inputSize, inputXs, inputYs, times, pointerIds,
+                 // Right now the line below is trying to figure out whether this is a gesture by
+diff --git a/native/jni/src/suggest/core/suggest.cpp b/native/jni/src/suggest/core/suggest.cpp
+index 52fa5a5db..95e998729 100644
+--- a/native/jni/src/suggest/core/suggest.cpp
++++ b/native/jni/src/suggest/core/suggest.cpp
+@@ -52,6 +52,7 @@ void Suggest::getSuggestions(ProximityInfo *pInfo, void *traverseSession,
+     PROF_INIT;
+     PROF_TIMER_START(0);
+     const float maxSpatialDistance = TRAVERSAL->getMaxSpatialDistance();
++    const bool isGesture = TRAVERSAL->getMaxPointerCount() == MAX_POINTER_COUNT_G;
+     DicTraverseSession *tSession = static_cast<DicTraverseSession *>(traverseSession);
+     tSession->setupForGetSuggestions(pInfo, inputCodePoints, inputSize, inputXs, inputYs, times,
+             pointerIds, maxSpatialDistance, TRAVERSAL->getMaxPointerCount());
+@@ -59,19 +60,36 @@ void Suggest::getSuggestions(ProximityInfo *pInfo, void *traverseSession,
+ 
+     initializeSearch(tSession);
+     PROF_TIMER_END(0);
+-    PROF_TIMER_START(1);
+ 
+-    // keep expanding search dicNodes until all have terminated.
+-    while (tSession->getDicTraverseCache()->activeSize() > 0) {
+-        expandCurrentDicNodes(tSession);
+-        tSession->getDicTraverseCache()->advanceActiveDicNodes();
+-        tSession->getDicTraverseCache()->advanceInputIndex(inputSize);
++    if (isGesture) {
++        PROF_TIMER_START(1);
++
++        // keep expanding search dicNodes until all have terminated.
++        while (tSession->getDicTraverseCache()->activeSize() > 0) {
++            expandCurrentDicNodesGesture(tSession);
++            tSession->getDicTraverseCache()->advanceActiveDicNodes();
++            tSession->getDicTraverseCache()->advanceInputIndex(inputSize);
++        }
++        PROF_TIMER_END(1);
++        PROF_TIMER_START(2);
++        SuggestionsOutputUtils::outputSuggestionsGesture(
++                SCORING, tSession, weightOfLangModelVsSpatialModel, outSuggestionResults);
++        PROF_TIMER_END(2);
++    } else {
++        PROF_TIMER_START(1);
++
++        // keep expanding search dicNodes until all have terminated.
++        while (tSession->getDicTraverseCache()->activeSize() > 0) {
++            expandCurrentDicNodes(tSession);
++            tSession->getDicTraverseCache()->advanceActiveDicNodes();
++            tSession->getDicTraverseCache()->advanceInputIndex(inputSize);
++        }
++        PROF_TIMER_END(1);
++        PROF_TIMER_START(2);
++        SuggestionsOutputUtils::outputSuggestions(
++                SCORING, tSession, weightOfLangModelVsSpatialModel, outSuggestionResults);
++        PROF_TIMER_END(2);
+     }
+-    PROF_TIMER_END(1);
+-    PROF_TIMER_START(2);
+-    SuggestionsOutputUtils::outputSuggestions(
+-            SCORING, tSession, weightOfLangModelVsSpatialModel, outSuggestionResults);
+-    PROF_TIMER_END(2);
+ }
+ 
+ /**
+@@ -441,4 +459,141 @@ void Suggest::createNextWordDicNode(DicTraverseSession *traverseSession, DicNode
+         traverseSession->getDicTraverseCache()->copyPushNextActive(&newDicNode);
+     }
+ }
++
++    //for gesture
++    void Suggest::expandCurrentDicNodesGesture(DicTraverseSession *traverseSession) const {
++        const int inputSize = traverseSession->getInputSize();
++        DicNodeVector childDicNodes(TRAVERSAL->getDefaultExpandDicNodeSize());
++        DicNode correctionDicNode;
++
++        while (traverseSession->getDicTraverseCache()->activeSize() > 0) {
++            DicNode dicNode;
++            traverseSession->getDicTraverseCache()->popActive(&dicNode);
++
++            if (dicNode.isTotalInputSizeExceedingLimit()) {
++                return;
++            }
++
++            // Only consider typing error corrections if the normalized compound distance is
++            // below a spatial distance threshold.
++            // NOTE: the threshold may need to be updated if scoring model changes.
++            const bool allowsErrorCorrections = TRAVERSAL->allowsErrorCorrections(&dicNode);
++            const int point0Index = dicNode.getInputIndex(0);
++            const bool isCompletion = dicNode.isCompletion(inputSize);
++
++            //const bool isSkip = TRAVERSAL->isSkip(traverseSession, &dicNode);
++            if (point0Index > 0 && TRAVERSAL->isSkip(traverseSession, &dicNode)) {
++                correctionDicNode.initByCopy(&dicNode);
++                processDicNodeAsSkipGesture(traverseSession, &correctionDicNode);
++            }
++
++            childDicNodes.clear();
++            DicNodeUtils::getAllChildDicNodes(&dicNode,
++                                              traverseSession->getDictionaryStructurePolicy(),
++                                              &childDicNodes);
++            const int childDicNodesSize = childDicNodes.getSizeAndLock();
++            for (int i = 0; i < childDicNodesSize; ++i) {
++                DicNode *const childDicNode = childDicNodes[i];
++                if (isCompletion) {
++                    // Handle forward lookahead when the lexicon letter exceeds the input size.
++                    processDicNodeAsMatchGesture(traverseSession, childDicNode);
++                    continue;
++                }
++
++                if(childDicNode->canBeIntentionalOmission()) {
++                    processExpandedDicNodeGesture(traverseSession, childDicNode);
++                    continue;
++                }
++
++                if (point0Index > 0 && TRAVERSAL->isOmission(traverseSession, &dicNode, childDicNode,
++                                                              allowsErrorCorrections)) {
++                    // TODO: (Gesture) Change weight between omission and substitution errors
++                    // TODO: (Gesture) Terminal node should not be handled as omission
++                    correctionDicNode.initByCopy(childDicNode);
++                    processDicNodeAsOmissionGesture(traverseSession, &correctionDicNode);
++                }
++                const ProximityType proximityType = TRAVERSAL->getProximityType(
++                        traverseSession, &dicNode, childDicNode);
++                switch (proximityType) {
++                    // TODO: Consider the difference of proximityType here
++                    case MATCH_CHAR:
++                        processDicNodeAsMatchGesture(traverseSession, childDicNode);
++                        break;
++                    default:
++                        // Just drop this dicNode and do nothing.
++                        break;
++                }
++            }
++
++        }
++    }
++
++    void Suggest::processDicNodeAsSkipGesture(DicTraverseSession *traverseSession,
++                                              DicNode *dicNode) const {
++        Weighting::addCostAndForwardInputIndexGesture(WEIGHTING, CT_SKIP, traverseSession,
++                                                      0 /* parentDicNode */, dicNode, 0 /* multiBigramMap */);
++        processExpandedDicNodeGesture(traverseSession, dicNode);
++    }
++
++    void Suggest::processDicNodeAsMatchGesture(DicTraverseSession *traverseSession,
++                                               DicNode *childDicNode) const {
++        weightChildNodeGesture(traverseSession, childDicNode);
++        processExpandedDicNodeGesture(traverseSession, childDicNode);
++    }
++
++    void Suggest::processDicNodeAsOmissionGesture(DicTraverseSession *traverseSession, DicNode *dicNode) const {
++        DicNodeVector childDicNodes;
++        DicNodeUtils::getAllChildDicNodes(
++                dicNode, traverseSession->getDictionaryStructurePolicy(), &childDicNodes);
++
++        const int size = childDicNodes.getSizeAndLock();
++        for (int i = 0; i < size; i++) {
++            DicNode *const childDicNode = childDicNodes[i];
++            // Treat this word as omission
++            if (!TRAVERSAL->isPossibleOmissionChildNode(traverseSession, dicNode, childDicNode)) {
++                continue;
++            }
++
++            Weighting::addCostAndForwardInputIndexGesture(WEIGHTING, CT_OMISSION, traverseSession,
++                                                   dicNode, childDicNode, 0 /* multiBigramMap */);
++            weightChildNodeGesture(traverseSession, childDicNode);
++            processExpandedDicNodeGesture(traverseSession, childDicNode);
++        }
++    }
++
++    void Suggest::weightChildNodeGesture(DicTraverseSession *traverseSession, DicNode *dicNode) const {
++        const int inputSize = traverseSession->getInputSize();
++        if (dicNode->isCompletion(inputSize)) {
++            Weighting::addCostAndForwardInputIndexGesture(WEIGHTING, CT_COMPLETION, traverseSession,
++                                                          0 /* parentDicNode */, dicNode, 0 /* multiBigramMap */);
++        } else {
++            Weighting::addCostAndForwardInputIndexGesture(WEIGHTING, CT_MATCH, traverseSession,
++                                                          0 /* parentDicNode */, dicNode, 0 /* multiBigramMap */);
++        }
++    }
++
++    void Suggest::processExpandedDicNodeGesture(
++            DicTraverseSession *traverseSession, DicNode *dicNode) const {
++        processTerminalDicNodeGesture(traverseSession, dicNode);
++        if (dicNode->getCompoundDistance() < static_cast<float>(MAX_VALUE_FOR_WEIGHTING)) {
++            if (dicNode->hasChildren()) {
++                traverseSession->getDicTraverseCache()->copyPushNextActive(dicNode);
++            }
++        }
++    }
++
++    void Suggest::processTerminalDicNodeGesture(
++            DicTraverseSession *traverseSession, DicNode *dicNode) const {
++        if (dicNode->getCompoundDistance() >= static_cast<float>(MAX_VALUE_FOR_WEIGHTING)) {
++            return;
++        }
++        if (!dicNode->isTerminalDicNode()) {
++            return;
++        }
++        // Create a non-cached node here.
++        DicNode terminalDicNode(*dicNode);
++        Weighting::addCostAndForwardInputIndexGesture(WEIGHTING, CT_TERMINAL, traverseSession, 0,
++                                               &terminalDicNode, traverseSession->getMultiBigramMap());
++        traverseSession->getDicTraverseCache()->copyPushTerminal(&terminalDicNode);
++    }
+ } // namespace latinime
+diff --git a/native/jni/src/suggest/core/suggest.h b/native/jni/src/suggest/core/suggest.h
+index 65d5918cf..39ae104df 100644
+--- a/native/jni/src/suggest/core/suggest.h
++++ b/native/jni/src/suggest/core/suggest.h
+@@ -73,6 +73,15 @@ class Suggest : public SuggestInterface {
+     void processDicNodeAsMatch(DicTraverseSession *traverseSession,
+             DicNode *childDicNode) const;
+ 
++    void expandCurrentDicNodesGesture(DicTraverseSession *traverseSession) const;
++    void processDicNodeAsOmissionGesture(DicTraverseSession *traverseSession, DicNode *dicNode) const;
++    void processDicNodeAsMatchGesture(DicTraverseSession *traverseSession,
++                               DicNode *childDicNode) const;
++    void processDicNodeAsSkipGesture(DicTraverseSession *traverseSession, DicNode *dicNode) const;
++    void processExpandedDicNodeGesture(DicTraverseSession *traverseSession, DicNode *dicNode) const;
++    void processTerminalDicNodeGesture(DicTraverseSession *traverseSession, DicNode *dicNode) const;
++    void weightChildNodeGesture(DicTraverseSession *traverseSession, DicNode *dicNode) const;
++
+     static const int MIN_CONTINUOUS_SUGGESTION_INPUT_SIZE;
+ 
+     const Traversal *const TRAVERSAL;
+diff --git a/native/jni/src/suggest/policyimpl/gesture/gesture_scoring.cpp b/native/jni/src/suggest/policyimpl/gesture/gesture_scoring.cpp
+new file mode 100644
+index 000000000..ba5691548
+--- /dev/null
++++ b/native/jni/src/suggest/policyimpl/gesture/gesture_scoring.cpp
+@@ -0,0 +1,10 @@
++//
++// Created by msj on 2017/3/9.
++//
++
++
++#include "suggest/policyimpl/gesture/gesture_scoring.h"
++
++namespace latinime {
++    const GestureScoring GestureScoring::sInstance;
++}  // namespace latinime
+\ No newline at end of file
+diff --git a/native/jni/src/suggest/policyimpl/gesture/gesture_scoring.h b/native/jni/src/suggest/policyimpl/gesture/gesture_scoring.h
+new file mode 100644
+index 000000000..574c00e4e
+--- /dev/null
++++ b/native/jni/src/suggest/policyimpl/gesture/gesture_scoring.h
+@@ -0,0 +1,108 @@
++//
++// Created by msj on 2017/3/9.
++//
++
++#ifndef GOOGLEKEYBOARDV7_GESTURE_SCORING_H
++#define GOOGLEKEYBOARDV7_GESTURE_SCORING_H
++
++#include "defines.h"
++#include "suggest/core/dictionary/error_type_utils.h"
++#include "suggest/core/policy/scoring.h"
++#include "suggest/core/session/dic_traverse_session.h"
++#include "suggest/policyimpl/typing/scoring_params.h"
++
++namespace latinime {
++
++    class DicNode;
++    class DicTraverseSession;
++
++    class GestureScoring : public Scoring {
++    public:
++        static const GestureScoring *getInstance() { return &sInstance; }
++
++        AK_FORCE_INLINE void getMostProbableString(const DicTraverseSession *const traverseSession,
++                                                   const float weightOfLangModelVsSpatialModel,
++                                                   SuggestionResults *const outSuggestionResults) const {}
++
++        AK_FORCE_INLINE float getAdjustedWeightOfLangModelVsSpatialModel(
++                DicTraverseSession *const traverseSession, DicNode *const terminals,
++                const int size) const {
++            return 1.0f;
++        }
++
++        AK_FORCE_INLINE int calculateFinalScore(const float compoundDistance, const int inputSize,
++                                                const ErrorTypeUtils::ErrorType containedErrorTypes, const bool forceCommit,
++                                                const bool boostExactMatches, const bool hasProbabilityZero) const {
++            const float maxDistance = ScoringParams::DISTANCE_WEIGHT_LANGUAGE
++                                      + static_cast<float>(inputSize) * ScoringParams::TYPING_MAX_OUTPUT_SCORE_PER_INPUT;
++            float score = ScoringParams::TYPING_BASE_OUTPUT_SCORE - compoundDistance / maxDistance;
++            if (forceCommit) {
++                score += ScoringParams::AUTOCORRECT_OUTPUT_THRESHOLD;
++            }
++            if (hasProbabilityZero) {
++                // Previously, when both legitimate 0-frequency words (such as distracters) and
++                // offensive words were encoded in the same way, distracters would never show up
++                // when the user blocked offensive words (the default setting, as well as the
++                // setting for regression tests).
++                //
++                // When b/11031090 was fixed and a separate encoding was used for offensive words,
++                // 0-frequency words would no longer be blocked when they were an "exact match"
++                // (where case mismatches and accent mismatches would be considered an "exact
++                // match"). The exact match boosting functionality meant that, for example, when
++                // the user typed "mt" they would be suggested the word "Mt", although they most
++                // probably meant to type "my".
++                //
++                // For this reason, we introduced this change, which does the following:
++                // * Defines the "perfect match" as a really exact match, with no room for case or
++                // accent mismatches
++                // * When the target word has probability zero (as "Mt" does, because it is a
++                // distracter), ONLY boost its score if it is a perfect match.
++                //
++                // By doing this, when the user types "mt", the word "Mt" will NOT be boosted, and
++                // they will get "my". However, if the user makes an explicit effort to type "Mt",
++                // we do boost the word "Mt" so that the user's input is not autocorrected to "My".
++                if (boostExactMatches && ErrorTypeUtils::isPerfectMatch(containedErrorTypes)) {
++                    score += ScoringParams::PERFECT_MATCH_PROMOTION;
++                }
++            } else {
++                if (boostExactMatches && ErrorTypeUtils::isExactMatch(containedErrorTypes)) {
++                    score += ScoringParams::EXACT_MATCH_PROMOTION;
++                    if ((ErrorTypeUtils::MATCH_WITH_WRONG_CASE & containedErrorTypes) != 0) {
++                        score -= ScoringParams::CASE_ERROR_PENALTY_FOR_EXACT_MATCH;
++                    }
++                    if ((ErrorTypeUtils::MATCH_WITH_MISSING_ACCENT & containedErrorTypes) != 0) {
++                        score -= ScoringParams::ACCENT_ERROR_PENALTY_FOR_EXACT_MATCH;
++                    }
++                    if ((ErrorTypeUtils::MATCH_WITH_DIGRAPH & containedErrorTypes) != 0) {
++                        score -= ScoringParams::DIGRAPH_PENALTY_FOR_EXACT_MATCH;
++                    }
++                }
++            }
++            return static_cast<int>(score * SUGGEST_INTERFACE_OUTPUT_SCALE);
++        }
++
++        AK_FORCE_INLINE float getDoubleLetterDemotionDistanceCost(
++                const DicNode *const terminalDicNode) const {
++            return 0.0f;
++        }
++
++        AK_FORCE_INLINE bool autoCorrectsToMultiWordSuggestionIfTop() const {
++            return true;
++        }
++
++        AK_FORCE_INLINE bool sameAsTyped(const DicTraverseSession *const traverseSession,
++                                         const DicNode *const dicNode) const {
++            return traverseSession->getProximityInfoState(0)->sameAsTyped(
++                    dicNode->getOutputWordBuf(), dicNode->getNodeCodePointCount());
++        }
++
++    private:
++        DISALLOW_COPY_AND_ASSIGN(GestureScoring);
++        static const GestureScoring sInstance;
++
++        GestureScoring() {}
++        ~GestureScoring() {}
++    };
++} // namespace latinime
++
++#endif //GOOGLEKEYBOARDV7_GESTURE_SCORING_H
+diff --git a/native/jni/src/suggest/policyimpl/gesture/gesture_suggest_policy.cpp b/native/jni/src/suggest/policyimpl/gesture/gesture_suggest_policy.cpp
+new file mode 100644
+index 000000000..13c51e934
+--- /dev/null
++++ b/native/jni/src/suggest/policyimpl/gesture/gesture_suggest_policy.cpp
+@@ -0,0 +1,10 @@
++//
++// Created by msj on 2017/3/9.
++//
++
++#include "suggest/policyimpl/gesture/gesture_suggest_policy.h"
++
++namespace latinime {
++    const GestureSuggestPolicy GestureSuggestPolicy::sInstance;
++} // namespace latinime
++
+diff --git a/native/jni/src/suggest/policyimpl/gesture/gesture_suggest_policy.h b/native/jni/src/suggest/policyimpl/gesture/gesture_suggest_policy.h
+new file mode 100644
+index 000000000..8d035a962
+--- /dev/null
++++ b/native/jni/src/suggest/policyimpl/gesture/gesture_suggest_policy.h
+@@ -0,0 +1,50 @@
++//
++// Created by msj on 2017/3/9.
++//
++
++#ifndef GOOGLEKEYBOARDV7_GESTURE_SUGGEST_POLICY_H
++#define GOOGLEKEYBOARDV7_GESTURE_SUGGEST_POLICY_H
++
++#include "defines.h"
++#include "suggest/core/policy/suggest_policy.h"
++#include "suggest/policyimpl/gesture/gesture_scoring.h"
++#include "suggest/policyimpl/gesture/gesture_traversal.h"
++#include "suggest/policyimpl/gesture/gesture_weighting.h"
++
++namespace latinime {
++
++    class Scoring;
++
++    class Traversal;
++
++    class Weighting;
++
++    class GestureSuggestPolicy : public SuggestPolicy {
++    public:
++        static const GestureSuggestPolicy *getInstance() { return &sInstance; }
++
++        GestureSuggestPolicy() { }
++
++        virtual ~GestureSuggestPolicy() { }
++
++        AK_FORCE_INLINE const Traversal *getTraversal() const {
++            return GestureTraversal::getInstance();
++        }
++
++        AK_FORCE_INLINE const Scoring *getScoring() const {
++            return GestureScoring::getInstance();
++        }
++
++        AK_FORCE_INLINE const Weighting *getWeighting() const {
++            return GestureWeighting::getInstance();
++        }
++
++    private:
++        DISALLOW_COPY_AND_ASSIGN(GestureSuggestPolicy);
++
++        static const GestureSuggestPolicy sInstance;
++    };
++
++} // namespace latinime
++
++#endif //GOOGLEKEYBOARDV7_GESTURE_SUGGEST_POLICY_H
+diff --git a/native/jni/src/suggest/policyimpl/gesture/gesture_suggest_policy_factory.cpp b/native/jni/src/suggest/policyimpl/gesture/gesture_suggest_policy_factory.cpp
+deleted file mode 100644
+index 6d3173937..000000000
+--- a/native/jni/src/suggest/policyimpl/gesture/gesture_suggest_policy_factory.cpp
++++ /dev/null
+@@ -1,21 +0,0 @@
+-/*
+- * Copyright (C) 2012 The Android Open Source Project
+- *
+- * Licensed under the Apache License, Version 2.0 (the "License");
+- * you may not use this file except in compliance with the License.
+- * You may obtain a copy of the License at
+- *
+- *      http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-
+-#include "gesture_suggest_policy_factory.h"
+-
+-namespace latinime {
+-    const SuggestPolicy *(*GestureSuggestPolicyFactory::sGestureSuggestFactoryMethod)() = 0;
+-} // namespace latinime
+diff --git a/native/jni/src/suggest/policyimpl/gesture/gesture_suggest_policy_factory.h b/native/jni/src/suggest/policyimpl/gesture/gesture_suggest_policy_factory.h
+index 509b01fc0..6052d9f98 100644
+--- a/native/jni/src/suggest/policyimpl/gesture/gesture_suggest_policy_factory.h
++++ b/native/jni/src/suggest/policyimpl/gesture/gesture_suggest_policy_factory.h
+@@ -18,27 +18,22 @@
+ #define LATINIME_GESTURE_SUGGEST_POLICY_FACTORY_H
+ 
+ #include "defines.h"
++#include "gesture_suggest_policy.h"
+ 
+ namespace latinime {
+ 
+ class SuggestPolicy;
+ 
+-class GestureSuggestPolicyFactory {
+- public:
+-    static void setGestureSuggestPolicyFactoryMethod(const SuggestPolicy *(*factoryMethod)()) {
+-        sGestureSuggestFactoryMethod = factoryMethod;
+-    }
++    class SuggestPolicy;
+ 
+-    static const SuggestPolicy *getGestureSuggestPolicy() {
+-        if (!sGestureSuggestFactoryMethod) {
+-            return 0;
++    class GestureSuggestPolicyFactory {
++    public:
++        static const SuggestPolicy *getGestureSuggestPolicy() {
++            return GestureSuggestPolicy::getInstance();
+         }
+-        return sGestureSuggestFactoryMethod();
+-    }
+ 
+- private:
+-    DISALLOW_COPY_AND_ASSIGN(GestureSuggestPolicyFactory);
+-    static const SuggestPolicy *(*sGestureSuggestFactoryMethod)();
+-};
++    private:
++        DISALLOW_COPY_AND_ASSIGN(GestureSuggestPolicyFactory);
++    };
+ } // namespace latinime
+ #endif // LATINIME_GESTURE_SUGGEST_POLICY_FACTORY_H
+diff --git a/native/jni/src/suggest/policyimpl/gesture/gesture_traversal.cpp b/native/jni/src/suggest/policyimpl/gesture/gesture_traversal.cpp
+new file mode 100644
+index 000000000..bfe046e6b
+--- /dev/null
++++ b/native/jni/src/suggest/policyimpl/gesture/gesture_traversal.cpp
+@@ -0,0 +1,10 @@
++//
++// Created by msj on 2017/3/9.
++//
++
++#include "suggest/policyimpl/gesture/gesture_traversal.h"
++
++namespace latinime {
++    const bool GestureTraversal::CORRECT_OMISSION = true;
++    const GestureTraversal GestureTraversal::sInstance;
++}  // namespace latinime
+\ No newline at end of file
+diff --git a/native/jni/src/suggest/policyimpl/gesture/gesture_traversal.h b/native/jni/src/suggest/policyimpl/gesture/gesture_traversal.h
+new file mode 100644
+index 000000000..fc298db49
+--- /dev/null
++++ b/native/jni/src/suggest/policyimpl/gesture/gesture_traversal.h
+@@ -0,0 +1,190 @@
++//
++// Created by msj on 2017/3/9.
++//
++
++#ifndef GOOGLEKEYBOARDV7_GESTURE_TRAVERSAL_H
++#define GOOGLEKEYBOARDV7_GESTURE_TRAVERSAL_H
++
++
++#include <cstdint>
++
++#include "defines.h"
++#include "suggest/core/dicnode/dic_node.h"
++#include "suggest/core/dicnode/dic_node_vector.h"
++#include "suggest/core/layout/proximity_info_state.h"
++#include "suggest/core/layout/proximity_info_utils.h"
++#include "suggest/core/policy/traversal.h"
++#include "suggest/core/session/dic_traverse_session.h"
++#include "suggest/core/suggest_options.h"
++#include "suggest/policyimpl/typing/scoring_params.h"
++#include "suggest/policyimpl/gesture/scoring_params_g.h"
++#include "utils/char_utils.h"
++
++namespace latinime {
++    class GestureTraversal : public Traversal {
++    public:
++        static const GestureTraversal *getInstance() { return &sInstance; }
++
++        int getMaxPointerCount() const {
++            return MAX_POINTER_COUNT_G;
++        }
++
++        float getMaxSpatialDistance() const {
++            return ScoringParams::MAX_SPATIAL_DISTANCE;
++        }
++
++        int getDefaultExpandDicNodeSize() const {
++            return DicNodeVector::DEFAULT_NODES_SIZE_FOR_OPTIMIZATION;
++        }
++
++        bool allowsErrorCorrections(const DicNode *const dicNode) const {
++            return dicNode->getNormalizedSpatialDistance()
++                   < ScoringParamsG::NORMALIZED_SPATIAL_DISTANCE_THRESHOLD_FOR_EDIT;
++        }
++
++        bool isSkip(const DicTraverseSession *const traverseSession,
++                    const DicNode *const dicNode) const {
++            const int inputSize = traverseSession->getInputSize();
++            const int point0Index = dicNode->getInputIndex(0);
++            if(point0Index < inputSize) {
++                const float probability = traverseSession->getProximityInfoState(0)->getProbability(point0Index, NOT_AN_INDEX);
++                if(probability < ScoringParamsG::THRESHOLD_FOR_SKIP) {
++                    return true;
++                }
++            }
++            return false;
++        }
++
++        bool isOmission(const DicTraverseSession *const traverseSession,
++                                        const DicNode *const dicNode, const DicNode *const childDicNode,
++                                        const bool allowsErrorCorrections) const {
++            if (!CORRECT_OMISSION) {
++                return false;
++            }
++            // Note: Always consider intentional omissions (like apostrophes) since they are common.
++            const bool canConsiderOmission = allowsErrorCorrections;
++            if (!canConsiderOmission) {
++                return false;
++            }
++            const int inputSize = traverseSession->getInputSize();
++            // TODO: Don't refer to isCompletion?
++            if (dicNode->isCompletion(inputSize)) {
++                return false;
++            }
++            if (dicNode->canBeIntentionalOmission()) {
++                return true;
++            }
++            const int point0Index = dicNode->getInputIndex(0);
++            const int currentBaseLowerCodePoint =
++                    CharUtils::toBaseLowerCase(childDicNode->getNodeCodePoint());
++            const int typedBaseLowerCodePoint =
++                    CharUtils::toBaseLowerCase(traverseSession->getProximityInfoState(0)
++                                                       ->getPrimaryCodePointAt(point0Index));
++            return (currentBaseLowerCodePoint != typedBaseLowerCodePoint);
++        }
++
++        ProximityType getProximityType(
++                const DicTraverseSession *const traverseSession, const DicNode *const dicNode,
++                const DicNode *const childDicNode) const {
++            return traverseSession->getProximityInfoState(0)->getProximityTypeG(
++                    dicNode->getInputIndex(0), childDicNode->getNodeCodePoint());
++        }
++
++        int getMaxCacheSize(const int inputSize, const float weightForLocale) const {
++            if (inputSize <= 1) {
++                return ScoringParamsG::MAX_CACHE_DIC_NODE_SIZE_FOR_SINGLE_POINT;
++            }
++            if (weightForLocale < ScoringParams::LOCALE_WEIGHT_THRESHOLD_FOR_SMALL_CACHE_SIZE) {
++                return ScoringParams::MAX_CACHE_DIC_NODE_SIZE_FOR_LOW_PROBABILITY_LOCALE;
++            }
++            return ScoringParamsG::MAX_CACHE_DIC_NODE_SIZE;
++        }
++
++        int getTerminalCacheSize() const {
++            return MAX_RESULTS;
++        }
++
++        bool isPossibleOmissionChildNode(
++                const DicTraverseSession *const traverseSession, const DicNode *const parentDicNode,
++                const DicNode *const dicNode) const {
++            const ProximityType proximityType =
++                    getProximityType(traverseSession, parentDicNode, dicNode);
++            if (!ProximityInfoUtils::isMatchOrProximityChar(proximityType)) {
++                return false;
++            }
++            return true;
++        }
++
++
++
++
++
++
++
++
++
++
++
++
++
++        AK_FORCE_INLINE bool isSpaceSubstitutionTerminal(
++                const DicTraverseSession *const traverseSession, const DicNode *const dicNode) const {
++            return false;
++        }
++
++        AK_FORCE_INLINE bool isSpaceOmissionTerminal(
++                const DicTraverseSession *const traverseSession, const DicNode *const dicNode) const {
++            return false;
++        }
++
++        AK_FORCE_INLINE bool shouldDepthLevelCache(
++                const DicTraverseSession *const traverseSession) const {
++            const int inputSize = traverseSession->getInputSize();
++            return traverseSession->isCacheBorderForTyping(inputSize);
++        }
++
++        AK_FORCE_INLINE bool shouldNodeLevelCache(
++                const DicTraverseSession *const traverseSession, const DicNode *const dicNode) const {
++            return false;
++        }
++
++        AK_FORCE_INLINE bool canDoLookAheadCorrection(
++                const DicTraverseSession *const traverseSession, const DicNode *const dicNode) const {
++            const int inputSize = traverseSession->getInputSize();
++            return dicNode->canDoLookAheadCorrection(inputSize);
++        }
++
++        AK_FORCE_INLINE bool needsToTraverseAllUserInput() const {
++            return true;
++        }
++
++
++
++
++
++
++
++        AK_FORCE_INLINE bool isGoodToTraverseNextWord(const DicNode *const dicNode,
++                                                      const int probability) const {
++            if (probability < ScoringParams::THRESHOLD_NEXT_WORD_PROBABILITY) {
++                return false;
++            }
++            const bool shortCappedWord = dicNode->getNodeCodePointCount()
++                                         < ScoringParams::THRESHOLD_SHORT_WORD_LENGTH && dicNode->isFirstCharUppercase();
++            return !shortCappedWord
++                   || probability >= ScoringParams::THRESHOLD_NEXT_WORD_PROBABILITY_FOR_CAPPED;
++        }
++
++    private:
++        DISALLOW_COPY_AND_ASSIGN(GestureTraversal);
++        static const bool CORRECT_OMISSION;
++        static const GestureTraversal sInstance;
++
++        GestureTraversal() {}
++        ~GestureTraversal() {}
++    };
++} // namespace latinime
++
++
++
++#endif //GOOGLEKEYBOARDV7_GESTURE_TRAVERSAL_H
+diff --git a/native/jni/src/suggest/policyimpl/gesture/gesture_weighting.cpp b/native/jni/src/suggest/policyimpl/gesture/gesture_weighting.cpp
+new file mode 100644
+index 000000000..da124180e
+--- /dev/null
++++ b/native/jni/src/suggest/policyimpl/gesture/gesture_weighting.cpp
+@@ -0,0 +1,97 @@
++//
++// Created by msj on 2017/3/9.
++//
++
++#include "suggest/policyimpl/gesture/gesture_weighting.h"
++
++#include "suggest/core/dicnode/dic_node.h"
++#include "suggest/core/layout/proximity_info.h"
++#include "suggest/policyimpl/typing/scoring_params.h"
++
++namespace latinime {
++
++    const GestureWeighting GestureWeighting::sInstance;
++
++    ErrorTypeUtils::ErrorType GestureWeighting::getErrorType(const CorrectionType correctionType,
++                                                            const DicTraverseSession *const traverseSession, const DicNode *const parentDicNode,
++                                                            const DicNode *const dicNode) const {
++        switch (correctionType) {
++            case CT_MATCH:
++                if (isProximityDicNode(traverseSession, dicNode)) {
++                    return ErrorTypeUtils::PROXIMITY_CORRECTION;
++                } else if (dicNode->isInDigraph()) {
++                    return ErrorTypeUtils::MATCH_WITH_DIGRAPH;
++                } else {
++                    // Compare the node code point with original primary code point on the keyboard.
++                    const ProximityInfoState *const pInfoState =
++                            traverseSession->getProximityInfoState(0);
++                    const int primaryCodePoint = pInfoState->getPrimaryCodePointAt(
++                            dicNode->getInputIndex(0));
++                    const int nodeCodePoint = dicNode->getNodeCodePoint();
++                    const int keyIndex = traverseSession->getProximityInfo()->getKeyIndexOf(
++                            primaryCodePoint);
++                    // TODO: Check whether the input code point is on the keyboard.
++                    if (primaryCodePoint == nodeCodePoint) {
++                        // Node code point is same as original code point on the keyboard.
++                        return ErrorTypeUtils::NOT_AN_ERROR;
++                    } else if (CharUtils::toLowerCase(primaryCodePoint) ==
++                               CharUtils::toLowerCase(nodeCodePoint)) {
++                        // Only cases of the code points are different.
++                        return ErrorTypeUtils::MATCH_WITH_WRONG_CASE;
++                    } else if (primaryCodePoint == CharUtils::toBaseCodePoint(nodeCodePoint)) {
++                        // Node code point is a variant of original code point.
++                        return ErrorTypeUtils::MATCH_WITH_MISSING_ACCENT;
++                    } else if (CharUtils::toBaseCodePoint(primaryCodePoint)
++                               == CharUtils::toBaseCodePoint(nodeCodePoint)) {
++                        // Base code points are the same but the code point is intentionally input.
++                        if (keyIndex == NOT_AN_INDEX) {
++                            return ErrorTypeUtils::MATCH_WITH_MISSING_EXPLICIT_ACCENT;
++                        }
++                        return ErrorTypeUtils::MATCH_WITH_WRONG_ACCENT;
++                    } else if (CharUtils::toLowerCase(primaryCodePoint)
++                               == CharUtils::toBaseLowerCase(nodeCodePoint)) {
++                        // Node code point is a variant of original code point and the cases are also
++                        // different.
++                        return ErrorTypeUtils::MATCH_WITH_MISSING_ACCENT
++                               | ErrorTypeUtils::MATCH_WITH_WRONG_CASE;
++                    } else {
++                        if (keyIndex == NOT_AN_INDEX) {
++                            return ErrorTypeUtils::MATCH_WITH_MISSING_EXPLICIT_ACCENT
++                                   | ErrorTypeUtils::MATCH_WITH_WRONG_CASE;
++                        }
++                        // Base code points are the same and the cases are different.
++                        return ErrorTypeUtils::MATCH_WITH_WRONG_ACCENT
++                               | ErrorTypeUtils::MATCH_WITH_WRONG_CASE;
++                    }
++                }
++                break;
++            case CT_ADDITIONAL_PROXIMITY:
++                // TODO: Change to EDIT_CORRECTION.
++                return ErrorTypeUtils::PROXIMITY_CORRECTION;
++            case CT_OMISSION:
++                if (parentDicNode->canBeIntentionalOmission()) {
++                    return ErrorTypeUtils::INTENTIONAL_OMISSION;
++                } else {
++                    return ErrorTypeUtils::EDIT_CORRECTION;
++                }
++                break;
++            case CT_SUBSTITUTION:
++                // TODO: Quit settng PROXIMITY_CORRECTION.
++                return ErrorTypeUtils::EDIT_CORRECTION | ErrorTypeUtils::PROXIMITY_CORRECTION;
++            case CT_INSERTION:
++            case CT_TERMINAL_INSERTION:
++            case CT_TRANSPOSITION:
++                return ErrorTypeUtils::EDIT_CORRECTION;
++            case CT_NEW_WORD_SPACE_OMISSION:
++            case CT_NEW_WORD_SPACE_SUBSTITUTION:
++                return ErrorTypeUtils::NEW_WORD;
++            case CT_TERMINAL:
++                return ErrorTypeUtils::NOT_AN_ERROR;
++            case CT_COMPLETION:
++                return ErrorTypeUtils::COMPLETION;
++            default:
++                return ErrorTypeUtils::NOT_AN_ERROR;
++        }
++    }
++}  // namespace latinime
++
+diff --git a/native/jni/src/suggest/policyimpl/gesture/gesture_weighting.h b/native/jni/src/suggest/policyimpl/gesture/gesture_weighting.h
+new file mode 100644
+index 000000000..869acaecb
+--- /dev/null
++++ b/native/jni/src/suggest/policyimpl/gesture/gesture_weighting.h
+@@ -0,0 +1,194 @@
++//
++// Created by msj on 2017/3/9.
++//
++
++#ifndef GOOGLEKEYBOARDV7_GESTURE_WEIGHTING_H
++#define GOOGLEKEYBOARDV7_GESTURE_WEIGHTING_H
++
++
++
++#include "defines.h"
++#include "suggest/core/dicnode/dic_node_utils.h"
++#include "suggest/core/dictionary/error_type_utils.h"
++#include "suggest/core/layout/touch_position_correction_utils.h"
++#include "suggest/core/layout/proximity_info.h"
++#include "suggest/core/policy/weighting.h"
++#include "suggest/core/session/dic_traverse_session.h"
++#include "suggest/policyimpl/typing/scoring_params.h"
++#include "suggest/policyimpl/gesture/scoring_params_g.h"
++#include "utils/char_utils.h"
++
++namespace latinime {
++
++    class DicNode;
++    struct DicNode_InputStateG;
++    class MultiBigramMap;
++
++    class GestureWeighting : public Weighting {
++    public:
++        static const GestureWeighting *getInstance() { return &sInstance; }
++
++    protected:
++        float getTerminalSpatialCost(const DicTraverseSession *const traverseSession,
++                                     const DicNode *const dicNode) const {
++            const int point0index = dicNode->getInputIndex(0);
++            const int tmpInputSize = traverseSession->getInputSize();
++            float cost = 0;
++            for (int i = point0index; i < tmpInputSize; i++) {
++                cost += traverseSession->getProximityInfoState(0)->getProbability(i, NOT_AN_INDEX);
++            }
++            if (point0index > tmpInputSize) {
++                cost += (point0index - tmpInputSize) * ScoringParamsG::DISTANCE_WEIGHT_EXCEEDING_INPUT_SIZE;
++            }
++
++            return cost;
++        }
++
++        float getTerminalLanguageCost(const DicTraverseSession *const traverseSession,
++                                      const DicNode *const dicNode, const float dicNodeLanguageImprobability) const {
++            return dicNodeLanguageImprobability * ScoringParamsG::DISTANCE_WEIGHT_LANGUAGE;
++        }
++
++        float getCompletionCost(const DicTraverseSession *const traverseSession,
++                                const DicNode *const dicNode) const {
++            // The auto completion starts when the input index is same as the input size
++            const bool firstCompletion = dicNode->getInputIndex(0)
++                                         == traverseSession->getInputSize();
++            // TODO: Change the cost for the first completion for the gesture?
++            const float cost = firstCompletion ? ScoringParamsG::COST_FIRST_COMPLETION
++                                               : ScoringParamsG::COST_COMPLETION;
++            return cost;
++        }
++
++        float getSkipCost(const DicTraverseSession *const traverseSession,
++                          const DicNode *const dicNode) const {
++            const int pointIndex = dicNode->getInputIndex(0);
++
++            float probability = traverseSession->getProximityInfoState(0)->getProbability(pointIndex, NOT_AN_INDEX);
++
++            return probability;
++        }
++
++        float getOmissionCost(const DicNode *const parentDicNode, const DicNode *const dicNode) const {
++            return (dicNode->isSameNodeCodePoint(parentDicNode))
++                   ? ScoringParamsG::OMISSION_COST_SAME_CHAR
++                   : ScoringParamsG::OMISSION_COST;
++        }
++
++        float getMatchedCost(const DicTraverseSession *const traverseSession,
++                             const DicNode *const dicNode, DicNode_InputStateG *inputStateG) const {
++            const int pointIndex = dicNode->getInputIndex(0);
++            const int baseChar = CharUtils::toBaseLowerCase(dicNode->getNodeCodePoint());
++            const int keyId = traverseSession->getProximityInfo()->getKeyIndexOf(baseChar);
++            const float probability = traverseSession-> getProximityInfoState(0)->getProbability(pointIndex, keyId);
++
++            return probability;
++        }
++
++        bool isProximityDicNode(const DicTraverseSession *const traverseSession,
++                                const DicNode *const dicNode) const {
++            const int pointIndex = dicNode->getInputIndex(0);
++            const int primaryCodePoint = CharUtils::toBaseLowerCase(
++                    traverseSession->getProximityInfoState(0)->getPrimaryCodePointAt(pointIndex));
++            const int dicNodeChar = CharUtils::toBaseLowerCase(dicNode->getNodeCodePoint());
++            return primaryCodePoint != dicNodeChar;
++        }
++
++        float getTranspositionCost(const DicTraverseSession *const traverseSession,
++                                   const DicNode *const parentDicNode, const DicNode *const dicNode) const {
++            const int16_t parentPointIndex = parentDicNode->getInputIndex(0);
++            const int prevCodePoint = parentDicNode->getNodeCodePoint();
++            const float distance1 = traverseSession->getProximityInfoState(0)->getPointToKeyLength(
++                    parentPointIndex + 1, CharUtils::toBaseLowerCase(prevCodePoint));
++            const int codePoint = dicNode->getNodeCodePoint();
++            const float distance2 = traverseSession->getProximityInfoState(0)->getPointToKeyLength(
++                    parentPointIndex, CharUtils::toBaseLowerCase(codePoint));
++            const float distance = distance1 + distance2;
++            const float weightedLengthDistance =
++                    distance * ScoringParams::DISTANCE_WEIGHT_LENGTH;
++            return ScoringParams::TRANSPOSITION_COST + weightedLengthDistance;
++        }
++
++        float getInsertionCost(const DicTraverseSession *const traverseSession,
++                               const DicNode *const parentDicNode, const DicNode *const dicNode) const {
++            const int16_t insertedPointIndex = parentDicNode->getInputIndex(0);
++            const int prevCodePoint = traverseSession->getProximityInfoState(0)->getPrimaryCodePointAt(
++                    insertedPointIndex);
++            const int currentCodePoint = dicNode->getNodeCodePoint();
++            const bool sameCodePoint = prevCodePoint == currentCodePoint;
++            const bool existsAdjacentProximityChars = traverseSession->getProximityInfoState(0)
++                    ->existsAdjacentProximityChars(insertedPointIndex);
++            const float dist = traverseSession->getProximityInfoState(0)->getPointToKeyLength(
++                    insertedPointIndex + 1, CharUtils::toBaseLowerCase(dicNode->getNodeCodePoint()));
++            const float weightedDistance = dist * ScoringParams::DISTANCE_WEIGHT_LENGTH;
++            const bool singleChar = dicNode->getNodeCodePointCount() == 1;
++            float cost = (singleChar ? ScoringParams::INSERTION_COST_FIRST_CHAR : 0.0f);
++            if (sameCodePoint) {
++                cost += ScoringParams::INSERTION_COST_SAME_CHAR;
++            } else if (existsAdjacentProximityChars) {
++                cost += ScoringParams::INSERTION_COST_PROXIMITY_CHAR;
++            } else {
++                cost += ScoringParams::INSERTION_COST;
++            }
++            return cost + weightedDistance;
++        }
++
++        float getSpaceOmissionCost(const DicTraverseSession *const traverseSession,
++                                   const DicNode *const dicNode, DicNode_InputStateG *inputStateG) const {
++            const float cost = ScoringParams::SPACE_OMISSION_COST;
++            return cost * traverseSession->getMultiWordCostMultiplier();
++        }
++
++        float getNewWordBigramLanguageCost(const DicTraverseSession *const traverseSession,
++                                           const DicNode *const dicNode,
++                                           MultiBigramMap *const multiBigramMap) const {
++            return DicNodeUtils::getBigramNodeImprobability(
++                    traverseSession->getDictionaryStructurePolicy(),
++                    dicNode, multiBigramMap) * ScoringParams::DISTANCE_WEIGHT_LANGUAGE;
++        }
++
++        float getTerminalInsertionCost(const DicTraverseSession *const traverseSession,
++                                       const DicNode *const dicNode) const {
++            const int inputIndex = dicNode->getInputIndex(0);
++            const int inputSize = traverseSession->getInputSize();
++            ASSERT(inputIndex < inputSize);
++            // TODO: Implement more efficient logic
++            return  ScoringParams::TERMINAL_INSERTION_COST * (inputSize - inputIndex);
++        }
++
++        AK_FORCE_INLINE bool needsToNormalizeCompoundDistance() const {
++            return false;
++        }
++
++        AK_FORCE_INLINE float getAdditionalProximityCost() const {
++            return ScoringParams::ADDITIONAL_PROXIMITY_COST;
++        }
++
++        AK_FORCE_INLINE float getSubstitutionCost() const {
++            return ScoringParams::SUBSTITUTION_COST;
++        }
++
++        AK_FORCE_INLINE float getSpaceSubstitutionCost(const DicTraverseSession *const traverseSession,
++                                                       const DicNode *const dicNode) const {
++            const int inputIndex = dicNode->getInputIndex(0);
++            const float distanceToSpaceKey = traverseSession->getProximityInfoState(0)
++                    ->getPointToKeyLength(inputIndex, KEYCODE_SPACE);
++            const float cost = ScoringParams::SPACE_SUBSTITUTION_COST * distanceToSpaceKey;
++            return cost * traverseSession->getMultiWordCostMultiplier();
++        }
++
++        ErrorTypeUtils::ErrorType getErrorType(const CorrectionType correctionType,
++                                               const DicTraverseSession *const traverseSession,
++                                               const DicNode *const parentDicNode, const DicNode *const dicNode) const;
++
++    private:
++        DISALLOW_COPY_AND_ASSIGN(GestureWeighting);
++        static const GestureWeighting sInstance;
++
++        GestureWeighting() {}
++        ~GestureWeighting() {}
++    };
++} // namespace latinime
++
++
++#endif //GOOGLEKEYBOARDV7_GESTURE_WEIGHTING_H
+diff --git a/native/jni/src/suggest/policyimpl/gesture/scoring_params_g.cpp b/native/jni/src/suggest/policyimpl/gesture/scoring_params_g.cpp
+new file mode 100644
+index 000000000..28712cc23
+--- /dev/null
++++ b/native/jni/src/suggest/policyimpl/gesture/scoring_params_g.cpp
+@@ -0,0 +1,30 @@
++//
++// Created by msj on 2017/3/14.
++//
++
++#include "suggest/policyimpl/gesture/scoring_params_g.h"
++
++namespace latinime {
++    const float ScoringParamsG::COST_FIRST_COMPLETION = 1.0f;
++    const float ScoringParamsG::COST_COMPLETION = 0.5f;
++    const float ScoringParamsG::NORMALIZED_SPATIAL_DISTANCE_THRESHOLD_FOR_EDIT = 0.5f;
++
++    const float ScoringParamsG::OMISSION_COST_SAME_CHAR = 0.2f;
++    const float ScoringParamsG::OMISSION_COST = 1.5f;
++
++    // 候选项中超出采样长度的长度的惩罚权重
++    const float ScoringParamsG::DISTANCE_WEIGHT_EXCEEDING_INPUT_SIZE = 1.0f;
++
++
++
++    // 这个是 词频补 的权重，和距离信息的负对数组成最终的得分
++    const float ScoringParamsG::DISTANCE_WEIGHT_LANGUAGE = 4.0f;
++
++    // 优先队列的长度，影响遍历词典的 检全率
++    const int ScoringParamsG::MAX_CACHE_DIC_NODE_SIZE = 80;
++    const int ScoringParamsG::MAX_CACHE_DIC_NODE_SIZE_FOR_SINGLE_POINT = 310;
++
++    // 该点是否跳过的阈值，含义为概率的负对数
++    const float ScoringParamsG::THRESHOLD_FOR_SKIP = 1.5f;
++} // namespace latinime
++
+diff --git a/native/jni/src/suggest/policyimpl/gesture/scoring_params_g.h b/native/jni/src/suggest/policyimpl/gesture/scoring_params_g.h
+new file mode 100644
+index 000000000..d681fba9c
+--- /dev/null
++++ b/native/jni/src/suggest/policyimpl/gesture/scoring_params_g.h
+@@ -0,0 +1,35 @@
++//
++// Created by msj on 2017/3/14.
++//
++
++#ifndef GOOGLEKEYBOARDV7_SCORING_PARAMS_G_H
++#define GOOGLEKEYBOARDV7_SCORING_PARAMS_G_H
++
++#include "defines.h"
++
++namespace latinime {
++    class ScoringParamsG {
++    public:
++        static const float COST_FIRST_COMPLETION;
++        static const float COST_COMPLETION;
++        static const float NORMALIZED_SPATIAL_DISTANCE_THRESHOLD_FOR_EDIT;
++
++        static const float OMISSION_COST_SAME_CHAR;
++        static const float OMISSION_COST;
++
++        static const float DISTANCE_WEIGHT_EXCEEDING_INPUT_SIZE;
++
++        static const float DISTANCE_WEIGHT_LANGUAGE;
++
++        static const int MAX_CACHE_DIC_NODE_SIZE;
++        static const int MAX_CACHE_DIC_NODE_SIZE_FOR_SINGLE_POINT;
++
++        static const float THRESHOLD_FOR_SKIP;
++    private:
++        DISALLOW_IMPLICIT_CONSTRUCTORS(ScoringParamsG);
++    };
++} // namespace latinime
++
++
++
++#endif //GOOGLEKEYBOARDV7_SCORING_PARAMS_G_H
+diff --git a/native/jni/src/suggest/policyimpl/typing/typing_traversal.h b/native/jni/src/suggest/policyimpl/typing/typing_traversal.h
+index b9b6314ae..0d381dbf2 100644
+--- a/native/jni/src/suggest/policyimpl/typing/typing_traversal.h
++++ b/native/jni/src/suggest/policyimpl/typing/typing_traversal.h
+@@ -73,6 +73,11 @@ class TypingTraversal : public Traversal {
+         return (currentBaseLowerCodePoint != typedBaseLowerCodePoint);
+     }
+ 
++    AK_FORCE_INLINE bool isSkip(const DicTraverseSession *const traverseSession,
++                const DicNode *const dicNode) const {
++        return false;
++    }
++
+     AK_FORCE_INLINE bool isSpaceSubstitutionTerminal(
+             const DicTraverseSession *const traverseSession, const DicNode *const dicNode) const {
+         if (!CORRECT_NEW_WORD_SPACE_SUBSTITUTION) {
+diff --git a/native/jni/src/suggest/policyimpl/typing/typing_weighting.h b/native/jni/src/suggest/policyimpl/typing/typing_weighting.h
+index 1338ac81a..ff402b2ae 100644
+--- a/native/jni/src/suggest/policyimpl/typing/typing_weighting.h
++++ b/native/jni/src/suggest/policyimpl/typing/typing_weighting.h
+@@ -52,6 +52,11 @@ class TypingWeighting : public Weighting {
+         return cost;
+     }
+ 
++    float getSkipCost(const DicTraverseSession *const traverseSession,
++                      const DicNode *const dicNode) const {
++        return 0;
++    }
++
+     float getOmissionCost(const DicNode *const parentDicNode, const DicNode *const dicNode) const {
+         const bool isZeroCostOmission = parentDicNode->isZeroCostOmission();
+         const bool isIntentionalOmission = parentDicNode->canBeIntentionalOmission();
+-- 
+2.43.0
+
