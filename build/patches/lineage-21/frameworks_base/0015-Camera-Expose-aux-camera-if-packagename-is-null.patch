@@ -1,4 +1,4 @@
-From d49b221ef90dbd0a142bbb084ff15dd82ad37a99 Mon Sep 17 00:00:00 2001
+From 4962e5cf664837eb67dda663cbf5ac0f790aa83b Mon Sep 17 00:00:00 2001
 From: wbs306 <wbs306@gmail.com>
 Date: Thu, 27 Oct 2022 20:58:17 +0800
 Subject: [PATCH 15/15] Camera: Expose aux camera if packagename is null
@@ -28,5 +28,5 @@ index e986320b4..388b31041 100644
                  SystemProperties.get("vendor.camera.aux.packagelist", ",").split(",")));
          List<String> packageExcludelist = new ArrayList<>(Arrays.asList(
 -- 
-2.42.1
+2.43.0
 

@@ -1,4 +1,4 @@
-From 718fa06976f4400da123d0282063192283f7b507 Mon Sep 17 00:00:00 2001
+From 7e1c38fc134d495ca19c52d1ebff70c2bcc5c1a8 Mon Sep 17 00:00:00 2001
 From: Danny Lin <danny@kdrag0n.dev>
 Date: Sun, 18 Jun 2023 12:23:01 +0530
 Subject: [PATCH 01/15] base: Add support for app signature spoofing
@@ -73,10 +73,10 @@ index 288ab479c..2124d89c6 100644
      field public static final String MICROPHONE = "android.permission-group.MICROPHONE";
      field public static final String NEARBY_DEVICES = "android.permission-group.NEARBY_DEVICES";
 diff --git a/core/res/AndroidManifest.xml b/core/res/AndroidManifest.xml
-index 3c70ba87d..71174d7f6 100644
+index 378d4de7e..5dc85cb0b 100644
 --- a/core/res/AndroidManifest.xml
 +++ b/core/res/AndroidManifest.xml
-@@ -4259,6 +4259,21 @@
+@@ -4258,6 +4258,21 @@
          android:description="@string/permdesc_getPackageSize"
          android:protectionLevel="normal" />
  
@@ -99,7 +99,7 @@ index 3c70ba87d..71174d7f6 100644
           {@link android.content.pm.PackageManager#addPackageToPreferred}
           for details. -->
 diff --git a/core/res/res/values/strings.xml b/core/res/res/values/strings.xml
-index a5b2b853f..f8b48c55c 100644
+index 9c018c30f..966fec172 100644
 --- a/core/res/res/values/strings.xml
 +++ b/core/res/res/values/strings.xml
 @@ -991,6 +991,18 @@
@@ -174,5 +174,5 @@ index 78f1fa60b..ffd14ad22 100644
              if (packageInfo == null) {
                  return null;
 -- 
-2.42.1
+2.43.0
 

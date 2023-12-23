@@ -1,4 +1,4 @@
-From d96e4ac5801205f2efa485b3f014976619bac972 Mon Sep 17 00:00:00 2001
+From 42cd211c5f84447bf9581fe2d5b8692b7c214498 Mon Sep 17 00:00:00 2001
 From: Danny Lin <danny@kdrag0n.dev>
 Date: Tue, 5 Oct 2021 21:01:09 -0700
 Subject: [PATCH 14/15] SystemUI: Require unlocking to use sensitive QS tiles
@@ -145,7 +145,7 @@ index 30765f7f9..8788c9867 100644
          MetricsLogger.action(mContext, getMetricsCategory(), !airplaneModeEnabled);
          if (!airplaneModeEnabled && TelephonyProperties.in_ecm_mode().orElse(false)) {
 diff --git a/packages/SystemUI/src/com/android/systemui/qs/tiles/BatterySaverTile.java b/packages/SystemUI/src/com/android/systemui/qs/tiles/BatterySaverTile.java
-index a444e7631..780ab99f2 100644
+index 9f10e6f1f..088ce9bf5 100644
 --- a/packages/SystemUI/src/com/android/systemui/qs/tiles/BatterySaverTile.java
 +++ b/packages/SystemUI/src/com/android/systemui/qs/tiles/BatterySaverTile.java
 @@ -42,11 +42,12 @@ import com.android.systemui.qs.SettingObserver;
@@ -190,7 +190,7 @@ index a444e7631..780ab99f2 100644
              return;
          }
 diff --git a/packages/SystemUI/src/com/android/systemui/qs/tiles/BluetoothTile.java b/packages/SystemUI/src/com/android/systemui/qs/tiles/BluetoothTile.java
-index 30218a6a3..dfced7c1c 100644
+index 26912f82b..a4927dcd8 100644
 --- a/packages/SystemUI/src/com/android/systemui/qs/tiles/BluetoothTile.java
 +++ b/packages/SystemUI/src/com/android/systemui/qs/tiles/BluetoothTile.java
 @@ -51,6 +51,7 @@ import com.android.systemui.qs.QsEventLogger;
@@ -485,7 +485,7 @@ index 000000000..d46eea6da
 +    }
 +}
 diff --git a/packages/SystemUI/src/com/android/systemui/qs/tiles/WorkModeTile.java b/packages/SystemUI/src/com/android/systemui/qs/tiles/WorkModeTile.java
-index 17e72e597..5f948fb8c 100644
+index 469ddd884..f71f26b23 100644
 --- a/packages/SystemUI/src/com/android/systemui/qs/tiles/WorkModeTile.java
 +++ b/packages/SystemUI/src/com/android/systemui/qs/tiles/WorkModeTile.java
 @@ -44,11 +44,12 @@ import com.android.systemui.qs.QsEventLogger;
@@ -530,5 +530,5 @@ index 17e72e597..5f948fb8c 100644
      }
  
 -- 
-2.42.1
+2.43.0
 

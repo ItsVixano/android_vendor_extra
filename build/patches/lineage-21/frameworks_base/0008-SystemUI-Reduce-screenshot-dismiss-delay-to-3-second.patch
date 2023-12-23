@@ -1,4 +1,4 @@
-From 045ba74a6d971fc7cd1ee0e4a0b2580e6af657e9 Mon Sep 17 00:00:00 2001
+From 4c6cbe093e98738571b08435c4553a49a4c4d948 Mon Sep 17 00:00:00 2001
 From: Danny Lin <danny@kdrag0n.dev>
 Date: Tue, 5 Oct 2021 19:18:48 -0700
 Subject: [PATCH 08/15] SystemUI: Reduce screenshot dismiss delay to 3 seconds
@@ -26,5 +26,5 @@ index 42e12c059..f4bd86db5 100644
      private final WindowContext mContext;
      private final FeatureFlags mFlags;
 -- 
-2.42.1
+2.43.0
 
