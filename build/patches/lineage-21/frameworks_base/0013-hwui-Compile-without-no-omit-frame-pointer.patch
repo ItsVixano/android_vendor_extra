@@ -1,7 +1,7 @@
 From 91fea00bf542b996e090d249c5dd20ece0c43834 Mon Sep 17 00:00:00 2001
 From: Sourajit Karmakar <sourajitk@statixos.com>
 Date: Thu, 20 Apr 2023 22:37:29 -0400
-Subject: [PATCH 13/15] hwui: Compile without no-omit-frame-pointer
+Subject: [PATCH 13/14] hwui: Compile without no-omit-frame-pointer
 
 By default, modern compilers optimize code by eliminating the frame pointer
 and using other techniques, such as register allocation and stack unwinding,

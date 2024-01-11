@@ -1,7 +1,7 @@
 From d04382337f7683d414b75f02137d9d50fe3fc842 Mon Sep 17 00:00:00 2001
 From: 00day0 <therandomuser11@gmail.com>
 Date: Tue, 10 Jan 2023 19:50:47 +0000
-Subject: [PATCH 02/15] Revert "Update Media Seekbar Thumb Shape"
+Subject: [PATCH 02/14] Revert "Update Media Seekbar Thumb Shape"
 
 This reverts commit fe8cdfc0c8042b7118bc353f843f7b94d1fd4822.
 

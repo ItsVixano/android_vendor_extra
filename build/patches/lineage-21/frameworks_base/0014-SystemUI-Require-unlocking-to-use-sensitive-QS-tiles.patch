@@ -1,7 +1,7 @@
 From 42cd211c5f84447bf9581fe2d5b8692b7c214498 Mon Sep 17 00:00:00 2001
 From: Danny Lin <danny@kdrag0n.dev>
 Date: Tue, 5 Oct 2021 21:01:09 -0700
-Subject: [PATCH 14/15] SystemUI: Require unlocking to use sensitive QS tiles
+Subject: [PATCH 14/14] SystemUI: Require unlocking to use sensitive QS tiles
 
 - Airplane mode
 - Battery saver

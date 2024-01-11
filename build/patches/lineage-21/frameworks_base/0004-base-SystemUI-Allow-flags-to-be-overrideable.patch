@@ -1,7 +1,7 @@
 From 9b2548d0d1bc0e47ba0a62540ad6e76950f6d876 Mon Sep 17 00:00:00 2001
 From: Jeferson <jroliveira.oliveira301@gmail.com>
 Date: Fri, 17 Jun 2022 15:01:28 +0200
-Subject: [PATCH 04/15] base: SystemUI: Allow flags to be overrideable
+Subject: [PATCH 04/14] base: SystemUI: Allow flags to be overrideable
 
 Change-Id: Ibc17db2878c026120e831bb587a2d00d55ba4856
 ---
