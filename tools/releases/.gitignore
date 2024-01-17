@@ -1,3 +1,11 @@
+# Ignore python cache
+__pycache__/
+
+# Ignore LineageOS_* repos
 LineageOS_*
+
+# Ignore Assets
 assets/
-/.env
+
+# Ignore GitHub key
+config.py

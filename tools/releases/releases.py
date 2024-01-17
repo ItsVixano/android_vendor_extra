@@ -8,7 +8,7 @@
 import sys
 import os
 import hashlib
-from dotenv import load_dotenv
+from config import GH_TOKEN
 from github import Github
 from time import sleep
 
@@ -64,8 +64,6 @@ def sha1sum(var):
 
 
 # Vars
-load_dotenv()
-GH_TOKEN = os.getenv("TOKEN")
 GH_ASSETS = os.listdir("assets")
 GH_OWNER = "ItsVixano-releases"  # Github profile name
 GH_REPO = get_device(sys.argv[1])[3]  # Github repo name
