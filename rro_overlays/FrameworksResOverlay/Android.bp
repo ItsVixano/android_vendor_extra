@@ -6,6 +6,6 @@
 //
 
 runtime_resource_overlay {
-    name: "WebViewOverlay",
+    name: "FrameworksResOverlay",
     system_ext_specific: true,
 }
