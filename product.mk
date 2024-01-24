@@ -20,7 +20,8 @@ $(call inherit-product-if-exists, vendor/xiaomi/miuicamera-$(shell echo -n $(TAR
 PRODUCT_PACKAGES += \
     FrameworksResOverlay \
     LineageUpdaterOverlay$(PRODUCT_VERSION_MAJOR) \
-    RippleSystemUIOverlay
+    RippleSystemUIOverlay \
+    SimpleDeviceConfigOverlay
 
 # RemovePackages
 PRODUCT_PACKAGES += \
