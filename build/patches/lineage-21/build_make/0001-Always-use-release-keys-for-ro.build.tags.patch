@@ -1,0 +1,29 @@
+From eb5051014baa32c2ce38cf663b939948dc7fcdb5 Mon Sep 17 00:00:00 2001
+From: Danny Lin <danny@kdrag0n.dev>
+Date: Wed, 17 Nov 2021 19:42:10 -0800
+Subject: [PATCH] Always use release-keys for ro.build.tags
+
+This can no longer be overridden elsewhere now that duplicate sysprops
+are detected as errors. BUILD_KEYS is preserved to keep the display
+build ID and other system info accurate.
+
+Change-Id: If1d3f3af4e47b1b11b0b9bc1ad55cc6207db497b
+---
+ core/sysprop.mk | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/core/sysprop.mk b/core/sysprop.mk
+index 5ff93a13e7..5f569cd426 100644
+--- a/core/sysprop.mk
++++ b/core/sysprop.mk
+@@ -164,7 +164,7 @@ BUILD_KEYS := test-keys
+ else
+ BUILD_KEYS := dev-keys
+ endif
+-BUILD_VERSION_TAGS += $(BUILD_KEYS)
++BUILD_VERSION_TAGS += release-keys
+ BUILD_VERSION_TAGS := $(subst $(space),$(comma),$(sort $(BUILD_VERSION_TAGS)))
+
+ # BUILD_FINGERPRINT is used used to uniquely identify the combined build and
+--
+2.43.0
