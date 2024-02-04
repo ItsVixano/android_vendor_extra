@@ -1,7 +1,7 @@
 From 3291d6147bf7087be440f4c9122f32227ef5e327 Mon Sep 17 00:00:00 2001
 From: Danny Lin <danny@kdrag0n.dev>
 Date: Mon, 5 Apr 2021 22:26:06 -0700
-Subject: [PATCH 1/2] libbinder: Suppress log spam when unlinking death
+Subject: [PATCH] libbinder: Suppress log spam when unlinking death
  recipients
 
 Unlinking death recipients (from linkToDeath) is a normal part of Binder
