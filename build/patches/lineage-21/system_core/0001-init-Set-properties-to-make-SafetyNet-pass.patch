@@ -1,7 +1,7 @@
-From b04e7e315c5d1da354b2c719ecff858004cae813 Mon Sep 17 00:00:00 2001
+From 54f8a9080fd39b8dec321d8af7654219594b749c Mon Sep 17 00:00:00 2001
 From: Danny Lin <danny@kdrag0n.dev>
 Date: Wed, 7 Oct 2020 00:24:54 -0700
-Subject: [PATCH] init: Set properties to make SafetyNet pass
+Subject: [PATCH] init: Report valid verified boot for SafetyNet checks
 
 Google's SafetyNet integrity checks will check the values of these
 properties when performing basic attestation. Setting fake values helps
@@ -14,76 +14,45 @@ cause SafetyNet to fail with an unlocked bootloader and/or custom
 software because the verified boot chain is broken in that case.
 
 Change-Id: I66d23fd91d82906b00d5eb020668f01ae83ec31f
-
-fastboot: Revert to Android 11 method of checking lock status
-
-Now that we're setting system-wide properties for SafetyNet, which
-includes ro.boot.verifiedbootstate=green, fastbootd always detects the
-bootloader as being locked. Revert to the Android 11 method of reading
-directly from the kernel cmdline to work arround the issue.
-
-- Also don't set these in recovery
-
-[ItsVixano: Sync with ih8sn]
-
-Change-Id: I57f6d48acddb29748778053edf354d7bd8994bd7
 ---
- fastboot/device/utility.cpp |  7 ++++++-
- init/property_service.cpp   | 17 +++++++++++++++++
- 2 files changed, 23 insertions(+), 1 deletion(-)
+ init/property_service.cpp | 17 +++++++++++++++++
+ 1 file changed, 17 insertions(+)
 
-diff --git a/fastboot/device/utility.cpp b/fastboot/device/utility.cpp
-index d374305e3..138be5985 100644
---- a/fastboot/device/utility.cpp
-+++ b/fastboot/device/utility.cpp
-@@ -195,7 +195,12 @@ std::vector<std::string> ListPartitions(FastbootDevice* device) {
- }
-
- bool GetDeviceLockStatus() {
--    return android::base::GetProperty("ro.boot.verifiedbootstate", "") == "green";
-+    std::string cmdline;
-+    // Return lock status true if unable to read kernel command line.
-+    if (!android::base::ReadFileToString("/proc/cmdline", &cmdline)) {
-+        return true;
-+    }
-+    return cmdline.find("androidboot.verifiedbootstate=orange") == std::string::npos;
- }
-
- bool UpdateAllPartitionMetadata(FastbootDevice* device, const std::string& super_name,
 diff --git a/init/property_service.cpp b/init/property_service.cpp
-index c8e1e14c3..c12a1eb30 100644
+index c8e1e14c3..308d71338 100644
 --- a/init/property_service.cpp
 +++ b/init/property_service.cpp
-@@ -1360,6 +1360,15 @@ static void ProcessBootconfig() {
+@@ -1360,6 +1360,20 @@ static void ProcessBootconfig() {
      });
  }
-
+ 
 +static void SetSafetyNetProps() {
++#ifdef RECOVERY
++    // Bail out if this is recovery, fastbootd, or anything other than a normal boot.
++    // fastbootd, in particular, needs the real values so it can allow flashing on
++    // unlocked bootloaders.
++    return;
++#endif
++
 +    InitPropertySet("ro.boot.flash.locked", "1");
-+    InitPropertySet("ro.boot.vbmeta.device_state", "locked");
 +    InitPropertySet("ro.boot.verifiedbootstate", "green");
 +    InitPropertySet("ro.boot.veritymode", "enforcing");
-+    InitPropertySet("ro.boot.warranty_bit", "0");
-+    InitPropertySet("ro.warranty_bit", "0");
++    InitPropertySet("ro.boot.vbmeta.device_state", "locked");
 +}
 +
  void PropertyInit() {
      selinux_callback cb;
      cb.func_audit = PropertyAuditCallback;
-@@ -1374,6 +1383,14 @@ void PropertyInit() {
+@@ -1374,6 +1388,9 @@ void PropertyInit() {
          LOG(FATAL) << "Failed to load serialized property info file";
      }
-
-+    // Report a valid verified boot chain to make Google SafetyNet integrity
-+    // checks pass. This needs to be done before parsing the kernel cmdline as
-+    // these properties are read-only and will be set to invalid values with
-+    // androidboot cmdline arguments.
-+    if (!IsRecoveryMode()) {
-+      SetSafetyNetProps();
-+    }
+ 
++    // Report valid verified boot chain to help pass Google SafetyNet integrity checks
++    SetSafetyNetProps();
 +
      // If arguments are passed both on the command line and in DT,
      // properties set in DT always have priority over the command-line ones.
      ProcessKernelDt();
---
+-- 
 2.43.0
+
