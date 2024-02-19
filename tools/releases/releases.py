@@ -48,6 +48,7 @@ def get_device(var):
         "xaga": {1: "POCO X4 GT", 2: "21.0", 3: "LineageOS_xaga"},
         # LineageOS 20.0
         "prague": {1: "Huawei P8 Lite 2017", 2: "20.0", 3: "LineageOS_prague"},
+        "stanford": {1: "Honor 9", 2: "20.0", 3: "LineageOS_stanford"},
     }.get(var)
 
 
