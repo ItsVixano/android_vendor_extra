@@ -145,6 +145,23 @@ upload_assets() {
     fi
 }
 
+los_lunch() {
+    # Def
+    source $(gettop)/vendor/lineage/vars/aosp_target_release
+    local lunch_device="${1}"
+    local lunch_type="userdebug"
+
+    if [ -n "${2}" ]; then
+        lunch_type="${2}"
+    fi
+
+    if [ "${LOS_VERSION}" -ge 21 ]; then
+        lunch lineage_${lunch_device}-${aosp_target_release}-${lunch_type}
+    else
+        lunch lineage_${lunch_device}-${lunch_type}
+    fi
+}
+
 mka_build() {
     # Defs
     DEVICE=""
@@ -190,7 +207,8 @@ mka_build() {
 
     # Build
     rm -rf out/target/product/"${DEVICE}"/lineage-*.zip &> /dev/null
-    lunch lineage_"${DEVICE}"-"${BUILD_TYPE}"
+    los_lunch "${DEVICE}" "${BUILD_TYPE}"
+
     if [[ "${DIRTY_BUILD}" != "true" ]]; then
         LOGI "Running installclean before compiling"
         mka installclean
