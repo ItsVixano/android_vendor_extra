@@ -1,7 +1,7 @@
-From a7bfe13d53a2f3b69538c04dcf7aa2a10b0debf1 Mon Sep 17 00:00:00 2001
+From 718581f510313710880e739352debaca020b13c5 Mon Sep 17 00:00:00 2001
 From: Vaisakh Murali <mvaisakh@statixos.com>
 Date: Wed, 19 Apr 2023 10:41:19 +0000
-Subject: [PATCH 12/14] libhwui: compile for performance
+Subject: [PATCH 11/12] libhwui: compile for performance
 
 Change-Id: I26a7d9877563b9f5dad633c5255d75b10297788d
 Signed-off-by: Vaisakh Murali <mvaisakh@statixos.com>
@@ -10,10 +10,10 @@ Signed-off-by: Vaisakh Murali <mvaisakh@statixos.com>
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/libs/hwui/Android.bp b/libs/hwui/Android.bp
-index 8ceaaed10..df9f8c419 100644
+index f25ad2e9d..753b8b3e4 100644
 --- a/libs/hwui/Android.bp
 +++ b/libs/hwui/Android.bp
-@@ -34,7 +34,7 @@ cc_defaults {
+@@ -47,7 +47,7 @@ cc_defaults {
          "hwui_static_deps",
          "skia_deps",
          //"hwui_bugreport_font_cache_usage",
@@ -23,5 +23,5 @@ index 8ceaaed10..df9f8c419 100644
      ],
  
 -- 
-2.43.0
+2.44.0
 

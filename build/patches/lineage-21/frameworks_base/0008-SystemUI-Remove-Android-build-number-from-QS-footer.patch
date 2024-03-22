@@ -1,7 +1,7 @@
-From ee3a3c342cc491f93e3d825fabea3d59a33916b6 Mon Sep 17 00:00:00 2001
+From 005635ab9b1fabc18bb253d51695d4ee8f9f5704 Mon Sep 17 00:00:00 2001
 From: Danny Lin <danny@kdrag0n.dev>
 Date: Tue, 5 Oct 2021 20:05:42 -0700
-Subject: [PATCH 09/14] SystemUI: Remove Android build number from QS footer
+Subject: [PATCH 08/12] SystemUI: Remove Android build number from QS footer
 
 This is only shown when developer settings is enabled, but we developers
 tend to always have it enabled. Irrelevant text showing up in the QS
@@ -14,7 +14,7 @@ Change-Id: Ideb38eeb603dc5c51945fafeae9c4eca18531b5d
  1 file changed, 4 insertions(+), 15 deletions(-)
 
 diff --git a/packages/SystemUI/src/com/android/systemui/qs/QSFooterView.java b/packages/SystemUI/src/com/android/systemui/qs/QSFooterView.java
-index 61905ae00..107e65c25 100644
+index c908e6e2a..609fc5ae0 100644
 --- a/packages/SystemUI/src/com/android/systemui/qs/QSFooterView.java
 +++ b/packages/SystemUI/src/com/android/systemui/qs/QSFooterView.java
 @@ -85,20 +85,9 @@ public class QSFooterView extends FrameLayout {
@@ -49,5 +49,5 @@ index 61905ae00..107e65c25 100644
 \ No newline at end of file
 +}
 -- 
-2.43.0
+2.44.0
 

@@ -1,7 +1,7 @@
-From 91fea00bf542b996e090d249c5dd20ece0c43834 Mon Sep 17 00:00:00 2001
+From e91b5fcc5a0778f237132b59d3db3a22c3671c80 Mon Sep 17 00:00:00 2001
 From: Sourajit Karmakar <sourajitk@statixos.com>
 Date: Thu, 20 Apr 2023 22:37:29 -0400
-Subject: [PATCH 13/14] hwui: Compile without no-omit-frame-pointer
+Subject: [PATCH 12/12] hwui: Compile without no-omit-frame-pointer
 
 By default, modern compilers optimize code by eliminating the frame pointer
 and using other techniques, such as register allocation and stack unwinding,
@@ -18,10 +18,10 @@ Change-Id: I2eb48741a8fded593cfeddb2fe83af638a2c68f2
  1 file changed, 1 deletion(-)
 
 diff --git a/libs/hwui/Android.bp b/libs/hwui/Android.bp
-index df9f8c419..251a9a15d 100644
+index 753b8b3e4..efb8489da 100644
 --- a/libs/hwui/Android.bp
 +++ b/libs/hwui/Android.bp
-@@ -159,7 +159,6 @@ cc_defaults {
+@@ -167,7 +167,6 @@ cc_defaults {
      name: "hwui_compile_for_perf",
      // TODO: Non-arm?
      cflags: [
@@ -30,5 +30,5 @@ index df9f8c419..251a9a15d 100644
      ],
  }
 -- 
-2.43.0
+2.44.0
 

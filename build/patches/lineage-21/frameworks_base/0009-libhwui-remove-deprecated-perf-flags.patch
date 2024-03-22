@@ -1,7 +1,7 @@
-From ddd43680e585a730dac6e150fa61df5e441e3b64 Mon Sep 17 00:00:00 2001
+From 3ae387b956605b466307a6e6f6bca2d6477bc86b Mon Sep 17 00:00:00 2001
 From: Vaisakh Murali <mvaisakh@statixos.com>
 Date: Wed, 19 Apr 2023 10:32:33 +0000
-Subject: [PATCH 10/14] libhwui: remove deprecated perf flags
+Subject: [PATCH 09/12] libhwui: remove deprecated perf flags
 
 These no longer exist in newer clang versions.
 
@@ -12,10 +12,10 @@ Signed-off-by: Vaisakh Murali <mvaisakh@statixos.com>
  1 file changed, 2 deletions(-)
 
 diff --git a/libs/hwui/Android.bp b/libs/hwui/Android.bp
-index c87c15669..d17a2c8a9 100644
+index 47411701e..d13336c85 100644
 --- a/libs/hwui/Android.bp
 +++ b/libs/hwui/Android.bp
-@@ -160,8 +160,6 @@ cc_defaults {
+@@ -168,8 +168,6 @@ cc_defaults {
      // TODO: Non-arm?
      cflags: [
          "-fno-omit-frame-pointer",
@@ -25,5 +25,5 @@ index c87c15669..d17a2c8a9 100644
  }
  
 -- 
-2.43.0
+2.44.0
 

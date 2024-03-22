@@ -1,0 +1,38 @@
+From d6d0dfd08520c382ec2671fe12d791dee7f4f367 Mon Sep 17 00:00:00 2001
+From: Michael W <baddaemon87@gmail.com>
+Date: Fri, 6 Jan 2023 21:00:01 +0800
+Subject: [PATCH 2/5] soong: Specify heap size for metalava for S+
+
+filiprrs: This is needed on systems with less than 16GB physical ram.
+Compiling using a single job is recommended.
+
+mnri: increase heap size to 8gb, reference: e5887b3107cffab2e208ff94a93284cae3a5fd1f
+      update commit title and description
+
+test: mka bacon -j8, no OOM encountered on 15GB ram machine
+
+Co-authored-by: althafvly <althafvly@gmail.com>
+Co-authored-by: nparashar150 <nparashar150@gmail.com>
+Co-authored-by: minaripenguin <minaripenguin@users.noreply.github.com>
+Signed-off-by: minaripenguin <minaripenguin@users.noreply.github.com>
+
+Change-Id: I5093dcdbe384fd33f0dc0fd9b89c91f8f9fa19fd
+---
+ java/droiddoc.go | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/java/droiddoc.go b/java/droiddoc.go
+index b0d5376..c00d27d 100644
+--- a/java/droiddoc.go
++++ b/java/droiddoc.go
+@@ -706,6 +706,7 @@ func javadocCmd(ctx android.ModuleContext, rule *android.RuleBuilder, srcs andro
+ 	cmd := rule.Command().
+ 		BuiltTool("soong_javac_wrapper").Tool(config.JavadocCmd(ctx)).
+ 		Flag(config.JavacVmFlags).
++		Flag("-J-Xmx8G").
+ 		FlagWithRspFileInputList("@", android.PathForModuleOut(ctx, "javadoc.rsp"), srcs).
+ 		FlagWithInput("@", srcJarList)
+ 
+-- 
+2.44.0
+
