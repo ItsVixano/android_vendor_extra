@@ -167,6 +167,7 @@ mka_build() {
     DEVICE=""
     KENREL_ONLY_BUILD="false"
     RELEASE_BUILD="false"
+    BETA_BUILD="false"
     local DIRTY_BUILD="false"
     local BUILD_TYPE="userdebug"
     local LOCAL_BUILD="false"
@@ -178,6 +179,9 @@ mka_build() {
                     ;;
             -r|--release-build)
                     RELEASE_BUILD="true"
+                    ;;
+            --beta)
+                    BETA_BUILD="true"
                     ;;
             -d|--dirty)
                     local DIRTY_BUILD="true"
@@ -203,6 +207,13 @@ mka_build() {
         export IS_RELEASE_BUILD=True
     else
         export IS_RELEASE_BUILD=False
+    fi
+
+    if [[ "${BETA_BUILD}" = "true" ]]; then
+        LOGW "Pushing the build as a beta once is done"
+        export IS_BETA_BUILD=True
+    else
+        export IS_BETA_BUILD=False
     fi
 
     # Build

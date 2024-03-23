@@ -14,6 +14,7 @@ from time import sleep
 
 # Release build
 is_release_build = os.environ.get("IS_RELEASE_BUILD", "False").lower() == "true"
+is_beta_build = os.environ.get("IS_BETA_BUILD", "False").lower() == "true"
 
 # Pre-checks
 if len(sys.argv) < 3:
@@ -95,6 +96,7 @@ release = repo.create_git_release(
     GH_NAME,  # name
     GH_MESSAGE,  # message
     draft=not is_release_build,  # draft
+    prerelease=is_beta_build,  # prelease
 )  # More info here https://pygithub.readthedocs.io/en/latest/github_objects/Repository.html?highlight=create_git_release#github.Repository.Repository.create_git_release
 
 # Upload assets
