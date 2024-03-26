@@ -6,6 +6,9 @@
 
 VENDOR_EXTRA_PATH := vendor/extra
 
+# Inherit priv Makefile
+-include $(VENDOR_EXTRA_PATH)/priv/BoardConfigPriv.mk
+
 # Camera
 ifneq ($(filter atoll lahaina,$(TARGET_BOARD_PLATFORM)),)
 TARGET_CAMERA_OVERRIDE_FORMAT_FROM_RESERVED := true
