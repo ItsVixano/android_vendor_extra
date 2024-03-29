@@ -273,11 +273,20 @@ mka_kernel() {
 
     kernel_targets="bootimage"
 
+    # ToDo Start
+    # Cleanup this mess
     if [[ "${DEVICE}" == "lisa" ]]; then
         kernel_targets+=" vendor_dlkmimage"
         kernel_targets+=" dtboimage"
         kernel_targets+=" vendorbootimage"
     fi
+
+    if [[ "${DEVICE}" == "xaga" ]]; then
+        kernel_targets+=" vendor_dlkmimage"
+        #kernel_targets+=" dtboimage"
+        kernel_targets+=" vendorbootimage"
+    fi
+    # ToDo End
 
     while ! mka ${kernel_targets} -j$(( $(nproc) / 2 + 2 )); do
         LOGE "${kernel_targets} failed!"
