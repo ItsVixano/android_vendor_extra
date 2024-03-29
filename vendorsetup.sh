@@ -279,13 +279,9 @@ mka_kernel() {
         kernel_targets+=" vendorbootimage"
     fi
 
-    for kernel_target in $kernel_targets;
-    do
-        while ! mka ${kernel_target} -j$(( $(nproc) / 2 + 2 )); do
-            LOGE "${kernel_target} failed!"
-            return 0
-            break
-        done
+    while ! mka ${kernel_targets} -j$(( $(nproc) / 2 + 2 )); do
+        LOGE "${kernel_targets} failed!"
+        return 0
     done
 
     if [[ "${LOCAL_BUILD}" != "true" ]]; then
