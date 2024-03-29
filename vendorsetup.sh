@@ -165,7 +165,6 @@ los_lunch() {
 mka_build() {
     # Defs
     DEVICE=""
-    KENREL_ONLY_BUILD="false"
     RELEASE_BUILD="false"
     BETA_BUILD="false"
     local DIRTY_BUILD="false"
@@ -242,7 +241,6 @@ mka_build() {
 mka_kernel() {
     # Defs
     DEVICE=""
-    KENREL_ONLY_BUILD="true"
     local BUILD_TYPE="userdebug"
     local LOCAL_BUILD="false"
 
@@ -265,6 +263,9 @@ mka_kernel() {
 
     # Don't push the kernel files to the public
     export IS_RELEASE_BUILD=False
+
+    # Kernel-only releases are beta, always
+    export IS_BETA_BUILD=True
 
     # Build
     lunch lineage_"${DEVICE}"-"${BUILD_TYPE}"
