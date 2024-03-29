@@ -268,7 +268,7 @@ mka_kernel() {
     export IS_BETA_BUILD=True
 
     # Build
-    lunch lineage_"${DEVICE}"-"${BUILD_TYPE}"
+    los_lunch "${DEVICE}" "${BUILD_TYPE}"
     LOGI "Running installclean before compiling"
     mka installclean
 
