@@ -237,7 +237,6 @@ mka_build() {
     LOGI "Done!"
 }
 
-
 mka_kernel() {
     # Defs
     DEVICE=""
@@ -272,22 +271,12 @@ mka_kernel() {
     LOGI "Running installclean before compiling"
     mka installclean
 
-    kernel_targets="bootimage"
+    declare -A device_kernel_targets
+    device_kernel_targets["lisa"]="bootimage dtboimage vendorbootimage vendor_dlkmimage"
+    device_kernel_targets["miatoll"]="bootimage dtboimage"
+    device_kernel_targets["xaga"]="bootimage vendorbootimage vendor_dlkmimage"
 
-    # ToDo Start
-    # Cleanup this mess
-    if [[ "${DEVICE}" == "lisa" ]]; then
-        kernel_targets+=" vendor_dlkmimage"
-        kernel_targets+=" dtboimage"
-        kernel_targets+=" vendorbootimage"
-    fi
-
-    if [[ "${DEVICE}" == "xaga" ]]; then
-        kernel_targets+=" vendor_dlkmimage"
-        #kernel_targets+=" dtboimage"
-        kernel_targets+=" vendorbootimage"
-    fi
-    # ToDo End
+    kernel_targets=${device_kernel_targets[$DEVICE]:-"bootimage"}
 
     while ! mka ${kernel_targets} -j$(( $(nproc) / 2 + 2 )); do
         LOGE "${kernel_targets} failed!"
