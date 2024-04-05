@@ -155,10 +155,12 @@ los_lunch() {
         lunch_type="${2}"
     fi
 
-    if [ "${LOS_VERSION}" -ge 21 ]; then
-        lunch lineage_${lunch_device}-${aosp_target_release}-${lunch_type}
-    else
+    if [ -z ${aosp_target_release} ]; then
+        # Android 14 QPR1 <
         lunch lineage_${lunch_device}-${lunch_type}
+    else
+        # Android 14 QPR2 =>
+        lunch lineage_${lunch_device}-${aosp_target_release}-${lunch_type}
     fi
 }
 
