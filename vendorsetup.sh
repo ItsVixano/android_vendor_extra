@@ -147,7 +147,7 @@ upload_assets() {
 
 los_lunch() {
     # Def
-    source $(gettop)/vendor/lineage/vars/aosp_target_release
+    source $(gettop)/vendor/lineage/vars/aosp_target_release &> /dev/null
     local lunch_device="${1}"
     local lunch_type="userdebug"
 
