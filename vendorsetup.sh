@@ -145,25 +145,6 @@ upload_assets() {
     fi
 }
 
-los_lunch() {
-    # Def
-    source $(gettop)/vendor/lineage/vars/aosp_target_release &> /dev/null
-    local lunch_device="${1}"
-    local lunch_type="userdebug"
-
-    if [ -n "${2}" ]; then
-        lunch_type="${2}"
-    fi
-
-    if [ -z ${aosp_target_release} ]; then
-        # Android 14 QPR1 <
-        lunch lineage_${lunch_device}-${lunch_type}
-    else
-        # Android 14 QPR2 =>
-        lunch lineage_${lunch_device}-${aosp_target_release}-${lunch_type}
-    fi
-}
-
 mka_build() {
     # Defs
     DEVICE=""
@@ -219,7 +200,7 @@ mka_build() {
 
     # Build
     rm -rf out/target/product/"${DEVICE}"/lineage-*.zip &> /dev/null
-    los_lunch "${DEVICE}" "${BUILD_TYPE}"
+    breakfast "${DEVICE}" "${BUILD_TYPE}"
 
     if [[ "${DIRTY_BUILD}" != "true" ]]; then
         LOGI "Running installclean before compiling"
@@ -269,7 +250,7 @@ mka_kernel() {
     export IS_BETA_BUILD=True
 
     # Build
-    los_lunch "${DEVICE}" "${BUILD_TYPE}"
+    breakfast "${DEVICE}" "${BUILD_TYPE}"
     LOGI "Running installclean before compiling"
     mka installclean
 
