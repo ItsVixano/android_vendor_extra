@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 #
-# Copyright (C) 2022 Giovanni Ricca
+# Copyright (C) 2022, 2024 Giovanni Ricca
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -8,8 +8,7 @@
 import sys
 import os
 import hashlib
-from config import GH_TOKEN
-from github import Github
+import github_py as github
 from time import sleep
 
 # Release build
@@ -50,6 +49,8 @@ def get_device(var):
         # LineageOS 20.0
         "prague": {1: "Huawei P8 Lite 2017", 2: "20.0", 3: "LineageOS_prague"},
         "stanford": {1: "Honor 9", 2: "20.0", 3: "LineageOS_stanford"},
+        ## TEST ##
+        "test": {1: "Test Device", 2: "12.3", 3: "LineageOS_test"},
     }.get(var)
 
 
@@ -90,31 +91,21 @@ for asset in GH_ASSETS:
 
 # Create release
 print("\nCreating a release page ...")
-repo = Github(GH_TOKEN).get_repo(GH_OWNER + "/" + GH_REPO)
-release = repo.create_git_release(
-    GH_TAG.replace("-", ""),  # tag
-    GH_NAME,  # name
-    GH_MESSAGE,  # message
-    draft=not is_release_build,  # draft
-    prerelease=is_beta_build,  # prelease
-)  # More info here https://pygithub.readthedocs.io/en/latest/github_objects/Repository.html?highlight=create_git_release#github.Repository.Repository.create_git_release
+release_data = {
+    "tag_name": GH_TAG.replace("-", ""),
+    "name": GH_NAME,
+    "body": GH_MESSAGE,
+    "draft": not is_release_build,
+    "prerelease": is_beta_build,
+}
+release = github.create_git_release(GH_OWNER, GH_REPO, release_data)
+release_id = release.json()["id"]
 
 # Upload assets
-print(
-    "\nSleep for 3 seconds, this is required for refreshing git api in order to get the latest untagged tag avaible in the repo"
-)
-sleep(3)  # Sleep for 3 second
-if is_release_build:
-    grep_command = f"grep {GH_TAG.replace('-', '')}"
-else:
-    grep_command = "grep untagged"
-
-GH_RELEASE_TAG = os.popen(
-    f"curl -H 'Authorization: token {GH_TOKEN}' https://api.github.com/repos/{GH_OWNER}/{GH_REPO}/releases 2>&1 | {grep_command} | sed 's/.*\///' | sed 's|\",||'| head -1"
-).read()
 for asset in GH_ASSETS:
     print(f"\nUploading `{asset}`")
-    repo.get_release(GH_RELEASE_TAG).upload_asset(f"assets/{asset}")
+    with open(f"assets/{asset}", "rb") as asset_data:
+        github.upload_asset(GH_OWNER, GH_REPO, release_id, asset, asset_data)
 
 print(
     f"\nDone!\nYou can find the uploaded assets on https://github.com/{GH_OWNER}/{GH_REPO}/releases"
