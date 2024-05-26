@@ -80,6 +80,7 @@ GH_MESSAGE = f"""📅 Build date: `{GH_TAG}`
 
 📔 [Device Changelog](https://raw.githubusercontent.com/ItsVixano-releases/{GH_REPO}/main/lineage-{GH_LINEAGE[:-2]}/changelog_{GH_TAG.replace('-', '')}.txt)
 📕 [Installation instructions](https://guide.itsvixano.me)
+🔄 [Update instructions](https://guide.itsvixano.me/update/)
 🔧 [Bug reporting](https://guide.itsvixano.me/troubleshooting/)
 
 🔗 Sha1sums"""
