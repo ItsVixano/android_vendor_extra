@@ -41,11 +41,11 @@ def get_device(var):
     return {
         # LineageOS 21.0
         "daisy": {1: "Mi A2 Lite", 2: "21.0", 3: "LineageOS_daisy"},
-        "sakura": {1: "Redmi 6 Pro", 2: "21.0", 3: "LineageOS_sakura"},
         "lisa": {1: "Xiaomi 11 Lite 5G NE", 2: "21.0", 3: "LineageOS_lisa"},
         "miatoll": {1: "Xiaomi Atoll Family", 2: "21.0", 3: "LineageOS_miatoll"},
-        "ysl": {1: "Redmi S2/Y2", 2: "21.0", 3: "LineageOS_ysl"},
+        "sakura": {1: "Redmi 6 Pro", 2: "21.0", 3: "LineageOS_sakura"},
         "xaga": {1: "POCO X4 GT", 2: "21.0", 3: "LineageOS_xaga"},
+        "ysl": {1: "Redmi S2/Y2", 2: "21.0", 3: "LineageOS_ysl"},
         # LineageOS 20.0
         "prague": {1: "Huawei P8 Lite 2017", 2: "20.0", 3: "LineageOS_prague"},
         "stanford": {1: "Honor 9", 2: "20.0", 3: "LineageOS_stanford"},
@@ -81,11 +81,21 @@ GH_MESSAGE = f"""📅 Build date: `{GH_TAG}`
 📔 [Device Changelog](https://raw.githubusercontent.com/ItsVixano-releases/{GH_REPO}/main/lineage-{GH_LINEAGE[:-2]}/changelog_{GH_TAG.replace('-', '')}.txt)
 📕 [Installation instructions](https://guide.itsvixano.me)
 🔄 [Update instructions](https://guide.itsvixano.me/update/)
-🔧 [Bug reporting](https://guide.itsvixano.me/troubleshooting/)
+🔧 [Bug reporting](https://guide.itsvixano.me/troubleshooting/)"""
 
-🔗 Sha1sums"""
+# Add warning about signed builds
+if GH_LINEAGE == "21.0" and sys.argv[1] in [
+    "daisy",
+    "lisa",
+    "miatoll",
+    "sakura",
+    "xaga",
+    "ysl",
+]:
+    GH_MESSAGE += "\n\n_As of LineageOS 21.0 `20240615` unofficial builds, my LineageOS builds are signed with self keys (hence you can't update your existing installation with the updater). Please follow the Update instructions to migrate from unsigned to signed builds._"
 
 # Calculate the sha1sums of the assets
+GH_MESSAGE += "\n\n🔗 Sha1sums"
 for asset in GH_ASSETS:
     print(f"\nCalculating sha1sum for `{asset}`")
     GH_MESSAGE += f"\n`{sha1sum(asset)} {asset}`"
