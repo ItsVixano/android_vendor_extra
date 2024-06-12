@@ -79,9 +79,8 @@ GH_MESSAGE = f"""📅 Build date: `{GH_TAG}`
 🔒 Security patches: `{GH_SECPATCH}`
 
 📔 [Device Changelog](https://raw.githubusercontent.com/ItsVixano-releases/{GH_REPO}/main/lineage-{GH_LINEAGE[:-2]}/changelog_{GH_TAG.replace('-', '')}.txt)
-📕 [Installation instructions](https://guide.itsvixano.me)
-🔄 [Update instructions](https://guide.itsvixano.me/update/)
-🔧 [Bug reporting](https://guide.itsvixano.me/troubleshooting/)"""
+📕 [Device wiki page](http://wiki.itsvixano.me/devices/{sys.argv[1]}/)
+🔧 [Bug reporting](https://wiki.itsvixano.me/troubleshooting/)"""
 
 # Add warning about signed builds
 if GH_LINEAGE == "21.0" and sys.argv[1] in [
@@ -92,7 +91,7 @@ if GH_LINEAGE == "21.0" and sys.argv[1] in [
     "xaga",
     "ysl",
 ]:
-    GH_MESSAGE += "\n\n_As of LineageOS 21.0 `20240615` unofficial builds, my LineageOS builds are signed with self keys (hence you can't update your existing installation with the updater). Please follow the Update instructions to migrate from unsigned to signed builds._"
+    GH_MESSAGE += f"\n\n_Since the Android 14 QPR3 update (June 2024 patches), I decided to start signing the builds with our private keys (hence you can't update your existing installation with the updater). Please follow the [Upgrade](http://wiki.itsvixano.me/devices/{sys.argv[1]}/upgrade) instructions to migrate from unsigned to signed builds._"
 
 # Calculate the sha1sums of the assets
 GH_MESSAGE += "\n\n🔗 Sha1sums"
