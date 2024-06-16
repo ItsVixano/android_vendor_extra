@@ -1,4 +1,4 @@
-From 005635ab9b1fabc18bb253d51695d4ee8f9f5704 Mon Sep 17 00:00:00 2001
+From 649c9069529aa01550c266127b7501ddc5edfb0c Mon Sep 17 00:00:00 2001
 From: Danny Lin <danny@kdrag0n.dev>
 Date: Tue, 5 Oct 2021 20:05:42 -0700
 Subject: [PATCH 08/12] SystemUI: Remove Android build number from QS footer
@@ -14,10 +14,10 @@ Change-Id: Ideb38eeb603dc5c51945fafeae9c4eca18531b5d
  1 file changed, 4 insertions(+), 15 deletions(-)
 
 diff --git a/packages/SystemUI/src/com/android/systemui/qs/QSFooterView.java b/packages/SystemUI/src/com/android/systemui/qs/QSFooterView.java
-index c908e6e2a..609fc5ae0 100644
+index 5a872d699f35..4c49c168c61d 100644
 --- a/packages/SystemUI/src/com/android/systemui/qs/QSFooterView.java
 +++ b/packages/SystemUI/src/com/android/systemui/qs/QSFooterView.java
-@@ -85,20 +85,9 @@ public class QSFooterView extends FrameLayout {
+@@ -86,20 +86,9 @@ public class QSFooterView extends FrameLayout {
  
      private void setBuildText() {
          if (mBuildText == null) return;
@@ -41,7 +41,7 @@ index c908e6e2a..609fc5ae0 100644
      }
  
      @Override
-@@ -188,4 +177,4 @@ public class QSFooterView extends FrameLayout {
+@@ -209,4 +198,4 @@ public class QSFooterView extends FrameLayout {
      private void updateVisibilities() {
          mBuildText.setVisibility(mExpanded && mShouldShowBuildText ? View.VISIBLE : View.INVISIBLE);
      }
@@ -49,5 +49,5 @@ index c908e6e2a..609fc5ae0 100644
 \ No newline at end of file
 +}
 -- 
-2.44.0
+2.45.2
 

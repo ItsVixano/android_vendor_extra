@@ -1,4 +1,4 @@
-From c94c451d8adf36c7a9762bb5675ff03b65622b0d Mon Sep 17 00:00:00 2001
+From 9e21f602e3e54be7bf5ea777a47d0d7dcc35e0a6 Mon Sep 17 00:00:00 2001
 From: Vaisakh Murali <mvaisakh@statixos.com>
 Date: Wed, 19 Apr 2023 10:35:47 +0000
 Subject: [PATCH 10/12] libhwui: enable O3 when compiling for perf
@@ -19,10 +19,10 @@ Signed-off-by: Vaisakh Murali <mvaisakh@statixos.com>
  1 file changed, 1 insertion(+)
 
 diff --git a/libs/hwui/Android.bp b/libs/hwui/Android.bp
-index d13336c85..f25ad2e9d 100644
+index f8612c2dedb9..57655d0dbb50 100644
 --- a/libs/hwui/Android.bp
 +++ b/libs/hwui/Android.bp
-@@ -168,6 +168,7 @@ cc_defaults {
+@@ -172,6 +172,7 @@ cc_defaults {
      // TODO: Non-arm?
      cflags: [
          "-fno-omit-frame-pointer",
@@ -31,5 +31,5 @@ index d13336c85..f25ad2e9d 100644
  }
  
 -- 
-2.44.0
+2.45.2
 

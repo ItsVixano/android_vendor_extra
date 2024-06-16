@@ -1,4 +1,4 @@
-From e91b5fcc5a0778f237132b59d3db3a22c3671c80 Mon Sep 17 00:00:00 2001
+From 5faf1f5c4332956ca761eaa8a9c5b7924f285585 Mon Sep 17 00:00:00 2001
 From: Sourajit Karmakar <sourajitk@statixos.com>
 Date: Thu, 20 Apr 2023 22:37:29 -0400
 Subject: [PATCH 12/12] hwui: Compile without no-omit-frame-pointer
@@ -18,10 +18,10 @@ Change-Id: I2eb48741a8fded593cfeddb2fe83af638a2c68f2
  1 file changed, 1 deletion(-)
 
 diff --git a/libs/hwui/Android.bp b/libs/hwui/Android.bp
-index 753b8b3e4..efb8489da 100644
+index 1744b7a284d0..22a24656e57b 100644
 --- a/libs/hwui/Android.bp
 +++ b/libs/hwui/Android.bp
-@@ -167,7 +167,6 @@ cc_defaults {
+@@ -171,7 +171,6 @@ cc_defaults {
      name: "hwui_compile_for_perf",
      // TODO: Non-arm?
      cflags: [
@@ -30,5 +30,5 @@ index 753b8b3e4..efb8489da 100644
      ],
  }
 -- 
-2.44.0
+2.45.2
 

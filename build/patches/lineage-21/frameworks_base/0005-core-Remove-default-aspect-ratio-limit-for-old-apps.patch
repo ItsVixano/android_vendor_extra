@@ -1,4 +1,4 @@
-From 44c8e6158386d092e77b40de2043875172397af8 Mon Sep 17 00:00:00 2001
+From 3420be7df1391734457336125e58f576bea72662 Mon Sep 17 00:00:00 2001
 From: Danny Lin <danny@kdrag0n.dev>
 Date: Tue, 3 Nov 2020 22:38:49 -0800
 Subject: [PATCH 05/12] core: Remove default aspect ratio limit for old apps
@@ -24,7 +24,7 @@ Signed-off-by: Adithya <gh0strider.2k18.reborn@gmail.com>
  2 files changed, 4 insertions(+), 7 deletions(-)
 
 diff --git a/core/java/android/content/pm/PackageParser.java b/core/java/android/content/pm/PackageParser.java
-index 10d652ee5..87f5f228c 100644
+index 10d652ee5e30..87f5f228cbb7 100644
 --- a/core/java/android/content/pm/PackageParser.java
 +++ b/core/java/android/content/pm/PackageParser.java
 @@ -4681,10 +4681,8 @@ public class PackageParser {
@@ -41,10 +41,10 @@ index 10d652ee5..87f5f228c 100644
          if (owner.applicationInfo.maxAspectRatio != 0) {
              // Use the application max aspect ration as default if set.
 diff --git a/core/java/com/android/internal/pm/pkg/parsing/ParsingPackageUtils.java b/core/java/com/android/internal/pm/pkg/parsing/ParsingPackageUtils.java
-index dbe4fba5d..e10602e4f 100644
+index 95ecd47e3037..22700343e461 100644
 --- a/core/java/com/android/internal/pm/pkg/parsing/ParsingPackageUtils.java
 +++ b/core/java/com/android/internal/pm/pkg/parsing/ParsingPackageUtils.java
-@@ -2854,9 +2854,8 @@ public class ParsingPackageUtils {
+@@ -2845,9 +2845,8 @@ public class ParsingPackageUtils {
       * ratio set.
       */
      private static void setMaxAspectRatio(ParsingPackage pkg) {
@@ -57,5 +57,5 @@ index dbe4fba5d..e10602e4f 100644
          float packageMaxAspectRatio = pkg.getMaxAspectRatio();
          if (packageMaxAspectRatio != 0) {
 -- 
-2.44.0
+2.45.2
 
