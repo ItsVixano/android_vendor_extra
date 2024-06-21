@@ -1,7 +1,7 @@
-From ac6768e5b3aa7093f0957e0d0e79431885ed0232 Mon Sep 17 00:00:00 2001
+From 78391aa25e82a474db93746a97a7ae2642a0565a Mon Sep 17 00:00:00 2001
 From: Giovanni Ricca <giovanniricca@proton.me>
 Date: Mon, 27 May 2024 15:48:19 +0000
-Subject: [PATCH] Spoof signed build to be `release-keys`, always
+Subject: [PATCH 1/2] core: Spoof `dev-keys` build to be `release-keys`
 
 * Unless we regenerate a new pair of keys, there is no need to resign a
   build with the same keys. `release-keys` can be achieved properly only
@@ -31,5 +31,5 @@ index da8cdaf..8561fa7 100644
  BUILD_VERSION_TAGS += $(BUILD_KEYS)
  BUILD_VERSION_TAGS := $(subst $(space),$(comma),$(sort $(BUILD_VERSION_TAGS)))
 -- 
-2.45.1
+2.45.2
 

@@ -1,0 +1,27 @@
+From 9728782d64b07488ee88aae80f016c6b2895f059 Mon Sep 17 00:00:00 2001
+From: neobuddy89 <neobuddy89@gmail.com>
+Date: Thu, 7 Sep 2017 02:17:44 +0530
+Subject: [PATCH 2/2] core: Make build ID simple
+
+Change-Id: Ib7dfa216a220b065c0b8190c3981c61aa1d408c5
+Signed-off-by: Pranav Vashi <neobuddy89@gmail.com>
+---
+ core/sysprop.mk | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/core/sysprop.mk b/core/sysprop.mk
+index 8561fa7..8761ecb 100644
+--- a/core/sysprop.mk
++++ b/core/sysprop.mk
+@@ -218,7 +218,7 @@ BUILD_THUMBPRINT :=
+ #
+ 
+ # BUILD_ID: detail info; has the same info as the build fingerprint
+-BUILD_DESC := $(TARGET_PRODUCT)-$(TARGET_BUILD_VARIANT) $(PLATFORM_VERSION) $(BUILD_ID) $(BUILD_NUMBER_FROM_FILE) $(BUILD_VERSION_TAGS)
++BUILD_DESC := $(BUILD_ID)
+ 
+ # BUILD_DISPLAY_ID is shown under Settings -> About Phone
+ ifeq ($(TARGET_BUILD_VARIANT),user)
+-- 
+2.45.2
+
