@@ -10,6 +10,9 @@ $(call inherit-product, vendor/extra/config/go.mk)
 # Inherit priv Makefile
 $(call inherit-product-if-exists, vendor/extra/priv/product.mk)
 
+# Inherit MiuiCamera Makefile
+$(call inherit-product-if-exists, vendor/xiaomi/miuicamera-$(shell echo -n $(TARGET_PRODUCT) | sed -e 's/^[a-z]*_//g')/device.mk)
+
 # Audio (Debugging)
 PRODUCT_PACKAGES += \
     tinymix \
@@ -17,9 +20,6 @@ PRODUCT_PACKAGES += \
 
 # Boot animation
 TARGET_BOOTANIMATION_HALF_RES := true
-
-# MiuiCamera
-$(call inherit-product-if-exists, vendor/xiaomi/miuicamera-$(shell echo -n $(TARGET_PRODUCT) | sed -e 's/^[a-z]*_//g')/device.mk)
 
 # Overlays
 PRODUCT_PACKAGES += \

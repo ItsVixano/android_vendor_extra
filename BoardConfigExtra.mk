@@ -9,6 +9,9 @@ VENDOR_EXTRA_PATH := vendor/extra
 # Inherit priv Makefile
 -include $(VENDOR_EXTRA_PATH)/priv/BoardConfigPriv.mk
 
+# Inherit MiuiCamera Makefile
+-include vendor/xiaomi/miuicamera-$(PRODUCT_DEVICE)/BoardConfig.mk
+
 # Camera
 ifneq ($(filter atoll lahaina,$(TARGET_BOARD_PLATFORM)),)
 TARGET_CAMERA_OVERRIDE_FORMAT_FROM_RESERVED := true
@@ -20,9 +23,6 @@ ifeq ($(TARGET_BOARD_PLATFORM), atoll)
 MALLOC_SVELTE := true
 MALLOC_SVELTE_FOR_LIBC32 := true
 endif
-
-# MiuiCamera
--include vendor/xiaomi/miuicamera-$(PRODUCT_DEVICE)/BoardConfig.mk
 
 # Props
 TARGET_VENDOR_PROP += $(VENDOR_EXTRA_PATH)/props/vendor.prop
