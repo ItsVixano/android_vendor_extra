@@ -78,8 +78,8 @@ GH_MESSAGE = f"""📅 Build date: `{GH_TAG}`
 
 🔒 Security patches: `{GH_SECPATCH}`
 
-📔 [Device Changelog](https://raw.githubusercontent.com/ItsVixano-releases/{GH_REPO}/main/lineage-{GH_LINEAGE[:-2]}/changelog_{GH_TAG.replace('-', '')}.txt)
-📕 [Device wiki page](http://wiki.itsvixano.me/devices/{sys.argv[1]}/)
+📔 [Changelog](https://raw.githubusercontent.com/ItsVixano-releases/{GH_REPO}/main/lineage-{GH_LINEAGE[:-2]}/changelog_{GH_TAG.replace('-', '')}.txt)
+📕 [Wiki & Instructions](https://wiki.itsvixano.me/devices/{sys.argv[1]}/)
 🔧 [Bug reporting](https://wiki.itsvixano.me/troubleshooting/)"""
 
 # Add warning about signed builds
