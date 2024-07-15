@@ -5,6 +5,10 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+# Enable ccache
+export USE_CCACHE=1
+export CCACHE_EXEC=/usr/bin/ccache
+
 # Override host metadata to make builds more reproducible and avoid leaking info
 export BUILD_USERNAME=itsvixano
 export BUILD_HOSTNAME=android-build
