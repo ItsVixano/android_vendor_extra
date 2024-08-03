@@ -117,6 +117,21 @@ upload_assets() {
     local datetime=$(date -d @${datetime_utc#*=} +%Y-%m-%d)
     local secpatch_prop=$(cat out/target/product/"${DEVICE}"/system/build.prop | grep ro.build.version.security_patch=)
     local secpatch=${secpatch_prop#ro.build.version.security_patch=}
+    files=(
+        # LineageOS Recovery zip
+        "lineage-*.zip"
+        # Lineage Recovery
+        "boot.img"
+        "dtbo.img"
+        "obj/PACKAGING/target_files_intermediates/*/IMAGES/vendor_boot.img"
+        "recovery.img"
+        "recovery_ramdisk.img"
+        "recovery_vendor.img"
+        # Extras
+        "obj/PACKAGING/target_files_intermediates/*/IMAGES/super_empty.img"
+        "obj/PACKAGING/target_files_intermediates/*/IMAGES/vbmeta.img"
+        "obj/PACKAGING/target_files_intermediates/*/IMAGES/vendor_dlkm.img"
+    )
 
     if [[ -z "${DEVICE}" ]]; then
         LOGE "Please define \${DEVICE} value"
@@ -127,7 +142,7 @@ upload_assets() {
     mkdir -p "${VENDOR_EXTRA_PATH}"/tools/releases/assets
     rm -rf "${VENDOR_EXTRA_PATH}"/tools/releases/assets/*
     cd out/target/product/"${DEVICE}"/ &> /dev/null
-    for file in lineage-*.zip recovery.img recovery_vendor.img boot.img vendor.img vendor_boot.img vendor_dlkm.img obj/PACKAGING/target_files_intermediates/*/IMAGES/super_empty.img obj/PACKAGING/target_files_intermediates/*/IMAGES/vendor.img obj/PACKAGING/target_files_intermediates/*/IMAGES/vendor_boot.img obj/PACKAGING/target_files_intermediates/*/IMAGES/vendor_dlkm.img dtbo.img; do
+    for file in "${files[@]}"; do
         cp ${file} "${VENDOR_EXTRA_PATH}"/tools/releases/assets &> /dev/null
     done
     cd "${VENDOR_EXTRA_PATH}"/tools/releases/
