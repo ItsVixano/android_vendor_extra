@@ -125,14 +125,14 @@ upload_assets() {
         # Lineage Recovery
         "boot.img"
         "dtbo.img"
-        "obj/PACKAGING/target_files_intermediates/*/IMAGES/vendor_boot.img"
         "recovery.img"
         "recovery_ramdisk.img"
         "recovery_vendor.img"
+        "vendor_boot.img"
         # Extras
-        "obj/PACKAGING/target_files_intermediates/*/IMAGES/super_empty.img"
-        "obj/PACKAGING/target_files_intermediates/*/IMAGES/vbmeta.img"
-        "obj/PACKAGING/target_files_intermediates/*/IMAGES/vendor_dlkm.img"
+        "super_empty.img"
+        "vbmeta.img"
+        "vendor_dlkm.img"
     )
 
     if [[ -z "${DEVICE}" ]]; then
