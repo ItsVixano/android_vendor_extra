@@ -126,7 +126,6 @@ upload_assets() {
         "boot.img"
         "dtbo.img"
         "recovery.img"
-        "recovery_ramdisk.img"
         "recovery_vendor.img"
         "vendor_boot.img"
         # Extras
