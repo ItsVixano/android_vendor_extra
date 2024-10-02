@@ -1,4 +1,5 @@
-#!/bin/bash
+# Shebang is intentionally missing - do not run as a script
+
 #
 # Copyright (C) 2022 Giovanni Ricca
 #
