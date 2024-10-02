@@ -50,25 +50,31 @@ LOGE() {
 if [[ "${APPLY_PATCHES}" == "true" ]]; then
     LOGI "Applying Patches"
 
-    for project_name in $(cd "${VENDOR_PATCHES_PATH_VERSION}"; echo */); do
+    for project_name in $(
+        cd "${VENDOR_PATCHES_PATH_VERSION}"
+        echo */
+    ); do
         project_path="$(tr _ / <<<$project_name)"
 
         cd $(gettop)/${project_path}
         git am "${VENDOR_PATCHES_PATH_VERSION}"/${project_name}/*.patch --no-gpg-sign
-        git am --abort &> /dev/null
+        git am --abort &>/dev/null
     done
 
     # vendor/extra/priv
     local VENDOR_PATCHES_PATH_PRIV_VERSION="${VENDOR_EXTRA_PATH}"/priv/build/patches/lineage-"${LOS_VERSION}"
     if [[ -d "${VENDOR_PATCHES_PATH_PRIV_VERSION}" ]]; then
         LOGI "Applying Private Patches"
-        for project_name in $(cd "${VENDOR_PATCHES_PATH_PRIV_VERSION}"; echo */); do
+        for project_name in $(
+            cd "${VENDOR_PATCHES_PATH_PRIV_VERSION}"
+            echo */
+        ); do
             project_path="$(tr _ / <<<$project_name)"
             if [[ $project_name == "external_jemalloc_new/" ]]; then project_path="external/jemalloc_new/"; fi
 
             cd $(gettop)/${project_path}
             git am "${VENDOR_PATCHES_PATH_PRIV_VERSION}"/${project_name}/*.patch --no-gpg-sign
-            git am --abort &> /dev/null
+            git am --abort &>/dev/null
         done
     fi
 
@@ -95,21 +101,20 @@ los_changelog() {
 
     # Thanks to @ ArianK16a
     # Generate changelog for 7 days
-    for i in $(seq 7);
-    do
-        after_date=`date --date="$i days ago" +%F`
-        until_date=`date --date="$(expr ${i} - 1) days ago" +%F`
-        echo "====================" >> ${changelog}
-        echo "     $until_date    " >> ${changelog}
-        echo "====================" >> ${changelog}
+    for i in $(seq 7); do
+        after_date=$(date --date="$i days ago" +%F)
+        until_date=$(date --date="$(expr ${i} - 1) days ago" +%F)
+        echo "====================" >>${changelog}
+        echo "     $until_date    " >>${changelog}
+        echo "====================" >>${changelog}
         while read path; do
-            git_log=`git --git-dir ./${path}/.git log --after=$after_date --until=$until_date --format=tformat:"%h %s [%an]"`
+            git_log=$(git --git-dir ./${path}/.git log --after=$after_date --until=$until_date --format=tformat:"%h %s [%an]")
             if [[ ! -z "${git_log}" ]]; then
-                echo "* ${path}" >> ${changelog}
-                echo "${git_log}" >> ${changelog}
-                echo "" >> ${changelog}
+                echo "* ${path}" >>${changelog}
+                echo "${git_log}" >>${changelog}
+                echo "" >>${changelog}
             fi
-        done < ./.repo/project.list
+        done <./.repo/project.list
     done
 }
 
@@ -142,9 +147,9 @@ upload_assets() {
     # Upload assets on github
     mkdir -p "${VENDOR_EXTRA_PATH}"/tools/releases/assets
     rm -rf "${VENDOR_EXTRA_PATH}"/tools/releases/assets/*
-    cd out/target/product/"${DEVICE}"/ &> /dev/null
+    cd out/target/product/"${DEVICE}"/ &>/dev/null
     for file in "${files[@]}"; do
-        cp ${file} "${VENDOR_EXTRA_PATH}"/tools/releases/assets &> /dev/null
+        cp ${file} "${VENDOR_EXTRA_PATH}"/tools/releases/assets &>/dev/null
     done
     cd "${VENDOR_EXTRA_PATH}"/tools/releases/
     ./releases.py "${DEVICE}" ${secpatch} ${datetime}
@@ -157,7 +162,7 @@ upload_assets() {
         los_changelog
 
         # Generate the OTA Json
-        cd out/target/product/"${DEVICE}"/ &> /dev/null
+        cd out/target/product/"${DEVICE}"/ &>/dev/null
         "${VENDOR_EXTRA_PATH}"/tools/releases/los_ota_json.py ${datetime}
 
         # Return to the root dir
@@ -177,23 +182,23 @@ mka_build() {
     while [ "$#" -gt 0 ]; do
         case "${1}" in
             --device)
-                    DEVICE="${2}"
-                    ;;
-            -r|--release-build)
-                    RELEASE_BUILD="true"
-                    ;;
+                DEVICE="${2}"
+                ;;
+            -r | --release-build)
+                RELEASE_BUILD="true"
+                ;;
             --beta)
-                    BETA_BUILD="true"
-                    ;;
-            -d|--dirty)
-                    local DIRTY_BUILD="true"
-                    ;;
+                BETA_BUILD="true"
+                ;;
+            -d | --dirty)
+                local DIRTY_BUILD="true"
+                ;;
             --build-type)
-                    local BUILD_TYPE="${2}"
-                    ;;
-            -l|--local-build)
-                    local LOCAL_BUILD="true"
-                    ;;
+                local BUILD_TYPE="${2}"
+                ;;
+            -l | --local-build)
+                local LOCAL_BUILD="true"
+                ;;
         esac
         shift
     done
@@ -219,7 +224,7 @@ mka_build() {
     fi
 
     # Build
-    rm -rf out/target/product/"${DEVICE}"/lineage-*.zip &> /dev/null
+    rm -rf out/target/product/"${DEVICE}"/lineage-*.zip &>/dev/null
     breakfast "${DEVICE}" "${BUILD_TYPE}"
 
     if [[ "${DIRTY_BUILD}" != "true" ]]; then
@@ -227,7 +232,7 @@ mka_build() {
         mka installclean
     fi
 
-    while ! mka bacon -j$(( $(nproc) / 2 + 2 )); do
+    while ! mka bacon -j$(($(nproc) / 2 + 2)); do
         LOGE "bacon failed!"
         return 0
     done
@@ -249,11 +254,11 @@ mka_kernel() {
     while [ "$#" -gt 0 ]; do
         case "${1}" in
             --device)
-                    DEVICE="${2}"
-                    ;;
-            -l|--local-build)
-                    local LOCAL_BUILD="true"
-                    ;;
+                DEVICE="${2}"
+                ;;
+            -l | --local-build)
+                local LOCAL_BUILD="true"
+                ;;
         esac
         shift
     done
@@ -281,7 +286,7 @@ mka_kernel() {
 
     kernel_targets=${device_kernel_targets[$DEVICE]:-"bootimage"}
 
-    while ! mka ${kernel_targets} -j$(( $(nproc) / 2 + 2 )); do
+    while ! mka ${kernel_targets} -j$(($(nproc) / 2 + 2)); do
         LOGE "${kernel_targets} failed!"
         return 0
     done
