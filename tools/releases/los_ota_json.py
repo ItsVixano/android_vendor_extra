@@ -59,7 +59,8 @@ ota = f"""{{
       "version": "{version}"
     }}
   ]
-}}"""
+}}
+"""
 
 for ota_json_file in glob(os.path.join(ota_path, "*.json")):
     ota_json = open(ota_json_file, "w")
@@ -69,7 +70,8 @@ for ota_json_file in glob(os.path.join(ota_path, "*.json")):
 # Write a dummy ota
 dummy_ota = """{
   "response": []
-}"""
+}
+"""
 dummy_ota_json = open(ota_path + f"{incremental}.json", "w")
 dummy_ota_json.write(dummy_ota)
 dummy_ota_json.close()
