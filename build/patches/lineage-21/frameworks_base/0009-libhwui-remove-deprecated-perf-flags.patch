@@ -1,4 +1,4 @@
-From 10876a264849e1dda9553e28b6408cec0b423089 Mon Sep 17 00:00:00 2001
+From b17781435cf2fd8f62cc6de279c49de04aa7f9a1 Mon Sep 17 00:00:00 2001
 From: Vaisakh Murali <mvaisakh@statixos.com>
 Date: Wed, 19 Apr 2023 10:32:33 +0000
 Subject: [PATCH 09/12] libhwui: remove deprecated perf flags
@@ -12,7 +12,7 @@ Signed-off-by: Vaisakh Murali <mvaisakh@statixos.com>
  1 file changed, 2 deletions(-)
 
 diff --git a/libs/hwui/Android.bp b/libs/hwui/Android.bp
-index 54f94f5c4b14..f8612c2dedb9 100644
+index 54f94f5c4..f8612c2de 100644
 --- a/libs/hwui/Android.bp
 +++ b/libs/hwui/Android.bp
 @@ -172,8 +172,6 @@ cc_defaults {
@@ -25,5 +25,5 @@ index 54f94f5c4b14..f8612c2dedb9 100644
  }
  
 -- 
-2.45.2
+2.47.0
 

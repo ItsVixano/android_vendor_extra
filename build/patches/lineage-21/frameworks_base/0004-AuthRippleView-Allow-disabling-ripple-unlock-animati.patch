@@ -1,4 +1,4 @@
-From d94d53f8975d630713b5574c5f6ec42d6df647fa Mon Sep 17 00:00:00 2001
+From 0fc3262d5f93ae3e4b90e1ff348be3d42912bc59 Mon Sep 17 00:00:00 2001
 From: jhenrique09 <jhsv09@gmail.com>
 Date: Sun, 12 Feb 2023 13:56:11 -0300
 Subject: [PATCH 04/12] AuthRippleView: Allow disabling ripple unlock animation
@@ -11,19 +11,19 @@ Change-Id: Ib5a1709e05ca1a405389ce0af25e7cb68c87b6ea
  2 files changed, 9 insertions(+)
 
 diff --git a/packages/SystemUI/res/values/lineage_config.xml b/packages/SystemUI/res/values/lineage_config.xml
-index 79c2865567a7..965f14b41e14 100644
+index 3bcd3ea0c..5eb0c1eea 100644
 --- a/packages/SystemUI/res/values/lineage_config.xml
 +++ b/packages/SystemUI/res/values/lineage_config.xml
-@@ -70,4 +70,7 @@
-          Possible values: 3, 3.1, 3.2, 4, 4.1, 4.2
-     -->
-     <string name="config_screenRecorderAVCProfileLevel" translatable="false">4.2</string>
+@@ -73,4 +73,7 @@
+ 
+     <!-- Whether to play turbulence noise after clicking the play button -->
+     <bool name="config_turbulenceNoise">true</bool>
 +
 +    <!-- Unlock ripple animation -->
 +    <bool name="config_enableUnlockRippleAnimation">true</bool>
  </resources>
 diff --git a/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt b/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt
-index d2c62272e2ec..940257f16bea 100644
+index d2c62272e..940257f16 100644
 --- a/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt
 +++ b/packages/SystemUI/src/com/android/systemui/biometrics/AuthRippleController.kt
 @@ -101,9 +101,11 @@ class AuthRippleController @Inject constructor(
@@ -57,5 +57,5 @@ index d2c62272e2ec..940257f16bea 100644
              return
          }
 -- 
-2.45.2
+2.47.0
 

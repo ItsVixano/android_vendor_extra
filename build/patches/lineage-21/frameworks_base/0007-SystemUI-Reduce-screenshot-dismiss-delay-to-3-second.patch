@@ -1,4 +1,4 @@
-From 7e95c61eee22cda07df1b24b0f06311d17531feb Mon Sep 17 00:00:00 2001
+From b8ac7327bdf725cd13a729d014a78df1fcf76bcc Mon Sep 17 00:00:00 2001
 From: Danny Lin <danny@kdrag0n.dev>
 Date: Tue, 5 Oct 2021 19:18:48 -0700
 Subject: [PATCH 07/12] SystemUI: Reduce screenshot dismiss delay to 3 seconds
@@ -13,10 +13,10 @@ Change-Id: I38f4bfbdd88a56a4ffba225c38050f28d43fc418
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/packages/SystemUI/src/com/android/systemui/screenshot/ScreenshotController.java b/packages/SystemUI/src/com/android/systemui/screenshot/ScreenshotController.java
-index 6a2a4ebc1494..dc27d80ea764 100644
+index 780fb40dd..96dacf43a 100644
 --- a/packages/SystemUI/src/com/android/systemui/screenshot/ScreenshotController.java
 +++ b/packages/SystemUI/src/com/android/systemui/screenshot/ScreenshotController.java
-@@ -239,7 +239,7 @@ public class ScreenshotController {
+@@ -242,7 +242,7 @@ public class ScreenshotController {
      // From WizardManagerHelper.java
      private static final String SETTINGS_SECURE_USER_SETUP_COMPLETE = "user_setup_complete";
  
@@ -26,5 +26,5 @@ index 6a2a4ebc1494..dc27d80ea764 100644
      private final WindowContext mContext;
      private final FeatureFlags mFlags;
 -- 
-2.45.2
+2.47.0
 

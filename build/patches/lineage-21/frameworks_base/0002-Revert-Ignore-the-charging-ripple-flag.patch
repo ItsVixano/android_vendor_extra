@@ -1,4 +1,4 @@
-From ca2c735872abe10eeefdcc942ba984a62b0fcd86 Mon Sep 17 00:00:00 2001
+From f20de251e823a83495dc9b11c4472de43dc982bd Mon Sep 17 00:00:00 2001
 From: Jeferson <jroliveira.oliveira301@gmail.com>
 Date: Fri, 17 Jun 2022 15:04:04 +0200
 Subject: [PATCH 02/12] Revert "Ignore the charging ripple flag."
@@ -11,7 +11,7 @@ Change-Id: I84bc2f0ac1df16f2bc4338b8f9300c35d309b56c
  1 file changed, 5 insertions(+), 4 deletions(-)
 
 diff --git a/packages/SystemUI/src/com/android/systemui/charging/WiredChargingRippleController.kt b/packages/SystemUI/src/com/android/systemui/charging/WiredChargingRippleController.kt
-index 718ef51aa161..47f30034f8d0 100644
+index 718ef51aa..47f30034f 100644
 --- a/packages/SystemUI/src/com/android/systemui/charging/WiredChargingRippleController.kt
 +++ b/packages/SystemUI/src/com/android/systemui/charging/WiredChargingRippleController.kt
 @@ -98,9 +98,10 @@ class WiredChargingRippleController @Inject constructor(
@@ -38,5 +38,5 @@ index 718ef51aa161..47f30034f8d0 100644
              // (which might happen just before the animation starts or right after
              // the animation ends.)
 -- 
-2.45.2
+2.47.0
 
