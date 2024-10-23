@@ -171,6 +171,51 @@ upload_assets() {
     fi
 }
 
+manual_upload_assets() {
+    # Defs
+    DEVICE=""
+    RELEASE_BUILD="false"
+    BETA_BUILD="false"
+
+    while [ "$#" -gt 0 ]; do
+        case "${1}" in
+            --device)
+                DEVICE="${2}"
+                ;;
+            -r | --release-build)
+                RELEASE_BUILD="true"
+                ;;
+            --beta)
+                BETA_BUILD="true"
+                ;;
+        esac
+        shift
+    done
+
+    if [[ -z "${DEVICE}" ]]; then
+        LOGE "Please define --device value"
+        return 0
+    fi
+
+    # Conditionally push the build to the public
+    if [[ "${RELEASE_BUILD}" = "true" ]]; then
+        LOGW "Pushing the build to the public once is done"
+        export IS_RELEASE_BUILD=True
+    else
+        export IS_RELEASE_BUILD=False
+    fi
+
+    if [[ "${BETA_BUILD}" = "true" ]]; then
+        LOGW "Pushing the build as a beta once is done"
+        export IS_BETA_BUILD=True
+    else
+        export IS_BETA_BUILD=False
+    fi
+
+    LOGI "Uploading the builds to the internet :D"
+    upload_assets
+}
+
 mka_build() {
     # Defs
     DEVICE=""
