@@ -39,6 +39,8 @@ except FileNotFoundError:
 # defs
 def get_device(var):
     return {
+        # LineageOS 22.0
+        # - None
         # LineageOS 21.0
         "daisy": {1: "Mi A2 Lite", 2: "21.0", 3: "LineageOS_daisy"},
         "gemstone": {1: "Redmi Note 12 5G", 2: "21.0", 3: "LineageOS_gemstone"},
