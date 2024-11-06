@@ -326,6 +326,7 @@ mka_kernel() {
     mka installclean
 
     declare -A device_kernel_targets
+    device_kernel_targets["gemstone"]="bootimage dtboimage vendorbootimage"
     device_kernel_targets["lisa"]="bootimage dtboimage vendorbootimage vendor_dlkmimage"
     device_kernel_targets["miatoll"]="bootimage dtboimage"
     device_kernel_targets["xaga"]="bootimage vendorbootimage vendor_dlkmimage"
