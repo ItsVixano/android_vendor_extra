@@ -23,11 +23,6 @@ export WITH_DEXPREOPT_DEBUG_INFO=false
 # Hardcode High Memory Parallel Process
 export NINJA_HIGHMEM_NUM_JOBS=1
 
-# goofy ahh build env
-if [[ $(cat /proc/sys/kernel/hostname) == "phenix" ]]; then
-    unset JAVAC
-fi
-
 # Defs
 LOS_VERSION=$(grep "PRODUCT_VERSION_MAJOR" $(gettop)/vendor/lineage/config/version.mk | sed 's/PRODUCT_VERSION_MAJOR = //g' | head -1)
 VENDOR_EXTRA_PATH=$(gettop)/vendor/extra
