@@ -26,8 +26,6 @@ export NINJA_HIGHMEM_NUM_JOBS=1
 # Defs
 LOS_VERSION=$(grep "PRODUCT_VERSION_MAJOR" $(gettop)/vendor/lineage/config/version.mk | sed 's/PRODUCT_VERSION_MAJOR = //g' | head -1)
 VENDOR_EXTRA_PATH=$(gettop)/vendor/extra
-VENDOR_PATCHES_PATH="${VENDOR_EXTRA_PATH}"/build/patches
-VENDOR_PATCHES_PATH_VERSION="${VENDOR_PATCHES_PATH}"/lineage-"${LOS_VERSION}"
 
 # Logging defs
 LOGI() {
@@ -43,39 +41,37 @@ LOGE() {
 }
 
 # Apply patches
-if [[ "${APPLY_PATCHES}" == "true" ]]; then
-    LOGI "Applying Patches"
+apply_patches() {
+    local patches_dir="$1"
 
-    for project_name in $(
-        cd "${VENDOR_PATCHES_PATH_VERSION}"
-        echo */
-    ); do
-        project_path="$(tr _ / <<<$project_name)"
+    [[ ! -d "${patches_dir}" ]] && return
 
-        cd $(gettop)/${project_path}
-        git am "${VENDOR_PATCHES_PATH_VERSION}"/${project_name}/*.patch --no-gpg-sign
-        git am --abort &>/dev/null
+    local root_dir=$(gettop)
+
+    for project_name in "${patches_dir}"/*/; do
+        # Remove trailing slash
+        project_name=${project_name%/}
+        # Get the base name
+        project_name=${project_name##*/}
+
+        # Handle special cases
+        local project_path=$(tr _ / <<<"${project_name}")
+
+        [[ "${project_name}" == "external_jemalloc_new" ]] && project_path="external/jemalloc_new"
+
+        cd "${root_dir}/${project_path}" || continue
+
+        # Apply patches and suppress abort messages
+        git am --no-gpg-sign "${patches_dir}/${project_name}"/*.patch || git am --abort &>/dev/null
     done
 
-    # vendor/extra/priv
-    local VENDOR_PATCHES_PATH_PRIV_VERSION="${VENDOR_EXTRA_PATH}"/priv/build/patches/lineage-"${LOS_VERSION}"
-    if [[ -d "${VENDOR_PATCHES_PATH_PRIV_VERSION}" ]]; then
-        LOGI "Applying Private Patches"
-        for project_name in $(
-            cd "${VENDOR_PATCHES_PATH_PRIV_VERSION}"
-            echo */
-        ); do
-            project_path="$(tr _ / <<<$project_name)"
-            if [[ $project_name == "external_jemalloc_new/" ]]; then project_path="external/jemalloc_new/"; fi
-
-            cd $(gettop)/${project_path}
-            git am "${VENDOR_PATCHES_PATH_PRIV_VERSION}"/${project_name}/*.patch --no-gpg-sign
-            git am --abort &>/dev/null
-        done
-    fi
-
-    # Return to source rootdir
+    # Return to source root directory
     croot
+}
+
+if [[ "${APPLY_PATCHES}" == "true" ]]; then
+    apply_patches "${VENDOR_EXTRA_PATH}"/build/patches/lineage-"${LOS_VERSION}"
+    apply_patches "${VENDOR_EXTRA_PATH}"/priv/build/patches/lineage-"${LOS_VERSION}"
 fi
 
 # functions
