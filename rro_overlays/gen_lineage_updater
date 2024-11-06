@@ -1,0 +1,10 @@
+#!/bin/bash
+
+RRO_NAME='LineageUpdaterOverlay'
+CURRENT_YEAR=$(date "+%Y")
+
+[ -z $1 ] && echo 'cringe' && exit
+
+[ -d ${RRO_NAME}/$1 ] && rm -rf ${RRO_NAME}/$1
+cp -r ${RRO_NAME}/base ${RRO_NAME}/$1
+sed -i "s/lineage-base/lineage-${1}/g; s/{curr_year}/${CURRENT_YEAR}/g" ${RRO_NAME}/$1/res/values/string.xml
