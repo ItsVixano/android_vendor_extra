@@ -29,15 +29,15 @@ VENDOR_EXTRA_PATH=$(gettop)/vendor/extra
 
 # Logging defs
 LOGI() {
-    echo -e "\n\033[32m[INFO]: $1\033[0m\n"
+    echo -e "\n\033[32m[INFO]: $1\033[0m"
 }
 
 LOGW() {
-    echo -e "\n\033[33m[WARNING]: $1\033[0m\n"
+    echo -e "\n\033[33m[WARNING]: $1\033[0m"
 }
 
 LOGE() {
-    echo -e "\n\033[31m[ERROR]: $1\033[0m\n"
+    echo -e "\n\033[31m[ERROR]: $1\033[0m"
 }
 
 # Apply patches
@@ -165,8 +165,8 @@ upload_assets() {
 manual_upload_assets() {
     # Defs
     DEVICE=""
-    RELEASE_BUILD="false"
-    BETA_BUILD="false"
+    export RELEASE_BUILD="false"
+    export BETA_BUILD="false"
 
     while [ "$#" -gt 0 ]; do
         case "${1}" in
@@ -174,10 +174,10 @@ manual_upload_assets() {
                 DEVICE="${2}"
                 ;;
             -r | --release-build)
-                RELEASE_BUILD="true"
+                export RELEASE_BUILD="true"
                 ;;
-            --beta)
-                BETA_BUILD="true"
+            -b | --beta)
+                export BETA_BUILD="true"
                 ;;
         esac
         shift
@@ -188,20 +188,8 @@ manual_upload_assets() {
         return 0
     fi
 
-    # Conditionally push the build to the public
-    if [[ "${RELEASE_BUILD}" = "true" ]]; then
-        LOGW "Pushing the build to the public once is done"
-        export IS_RELEASE_BUILD=True
-    else
-        export IS_RELEASE_BUILD=False
-    fi
-
-    if [[ "${BETA_BUILD}" = "true" ]]; then
-        LOGW "Pushing the build as a beta once is done"
-        export IS_BETA_BUILD=True
-    else
-        export IS_BETA_BUILD=False
-    fi
+    [[ "${RELEASE_BUILD}" == "true" ]] && LOGW "Pushing the build to the public once is done"
+    [[ "${BETA_BUILD}" == "true" ]] && LOGW "Pushing the build as a beta once is done"
 
     LOGI "Uploading the builds to the internet :D"
     upload_assets
@@ -210,8 +198,8 @@ manual_upload_assets() {
 mka_build() {
     # Defs
     DEVICE=""
-    RELEASE_BUILD="false"
-    BETA_BUILD="false"
+    export RELEASE_BUILD="false"
+    export BETA_BUILD="false"
     local DIRTY_BUILD="false"
     local BUILD_TYPE="userdebug"
     local LOCAL_BUILD="false"
@@ -222,10 +210,10 @@ mka_build() {
                 DEVICE="${2}"
                 ;;
             -r | --release-build)
-                RELEASE_BUILD="true"
+                export RELEASE_BUILD="true"
                 ;;
-            --beta)
-                BETA_BUILD="true"
+            -b | --beta)
+                export BETA_BUILD="true"
                 ;;
             -d | --dirty)
                 local DIRTY_BUILD="true"
@@ -245,29 +233,14 @@ mka_build() {
         return 0
     fi
 
-    # Conditionally push the build to the public
-    if [[ "${RELEASE_BUILD}" = "true" ]]; then
-        LOGW "Pushing the build to the public once is done"
-        export IS_RELEASE_BUILD=True
-    else
-        export IS_RELEASE_BUILD=False
-    fi
-
-    if [[ "${BETA_BUILD}" = "true" ]]; then
-        LOGW "Pushing the build as a beta once is done"
-        export IS_BETA_BUILD=True
-    else
-        export IS_BETA_BUILD=False
-    fi
+    [[ "${RELEASE_BUILD}" == "true" ]] && LOGW "Pushing the build to the public once is done"
+    [[ "${BETA_BUILD}" == "true" ]] && LOGW "Pushing the build as a beta once is done"
 
     # Build
     rm -rf out/target/product/"${DEVICE}"/lineage-*.zip &>/dev/null
     breakfast "${DEVICE}" "${BUILD_TYPE}"
 
-    if [[ "${DIRTY_BUILD}" != "true" ]]; then
-        LOGI "Running installclean before compiling"
-        mka installclean
-    fi
+    [[ "${DIRTY_BUILD}" != "true" ]] && mka installclean
 
     while ! mka bacon -j$(($(nproc) / 2 + 2)); do
         LOGE "bacon failed!"
@@ -285,6 +258,8 @@ mka_build() {
 mka_kernel() {
     # Defs
     DEVICE=""
+    export RELEASE_BUILD="false"
+    export BETA_BUILD="false"
     local BUILD_TYPE="userdebug"
     local LOCAL_BUILD="false"
 
@@ -305,15 +280,8 @@ mka_kernel() {
         return 0
     fi
 
-    # Don't push the kernel files to the public
-    export IS_RELEASE_BUILD=False
-
-    # Kernel-only releases are beta, always
-    export IS_BETA_BUILD=True
-
     # Build
     breakfast "${DEVICE}" "${BUILD_TYPE}"
-    LOGI "Running installclean before compiling"
     mka installclean
 
     declare -A device_kernel_targets

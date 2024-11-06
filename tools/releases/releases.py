@@ -12,8 +12,8 @@ import github_py as github
 from time import sleep
 
 # Release build
-is_release_build = os.environ.get("IS_RELEASE_BUILD", "False").lower() == "true"
-is_beta_build = os.environ.get("IS_BETA_BUILD", "False").lower() == "true"
+is_release_build = os.environ.get("RELEASE_BUILD", "false") == "true"
+is_beta_build = os.environ.get("BETA_BUILD", "false") == "true"
 
 # Pre-checks
 if len(sys.argv) < 3:

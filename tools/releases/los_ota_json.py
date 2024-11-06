@@ -13,7 +13,7 @@ from re import search, sub
 from glob import glob
 
 # Release build
-is_release_build = os.environ.get("IS_RELEASE_BUILD", "False").lower() == "true"
+is_release_build = os.environ.get("RELEASE_BUILD", "false") == "true"
 
 
 def getprop(prop):
