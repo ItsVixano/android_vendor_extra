@@ -7,7 +7,7 @@
 #
 
 # Enable ccache
-if [[ $(cat /proc/sys/kernel/hostname) == "cringemachine" ]]; then
+if [[ -f /etc/ccache.conf ]]; then
     export USE_CCACHE=1
     export CCACHE_EXEC=/usr/bin/ccache
 fi
