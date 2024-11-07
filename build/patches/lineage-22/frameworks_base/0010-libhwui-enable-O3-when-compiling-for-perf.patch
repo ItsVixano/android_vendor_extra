@@ -1,0 +1,35 @@
+From 164b025dc91dd16c4d279b7458eba31ddc5af1ef Mon Sep 17 00:00:00 2001
+From: Vaisakh Murali <mvaisakh@statixos.com>
+Date: Wed, 19 Apr 2023 10:35:47 +0000
+Subject: [PATCH 10/12] libhwui: enable O3 when compiling for perf
+
+This reduces ui jitter by a lot.
+
+Jitter (averge):
+
+Before | After
+----------------
+~300ms | ~200ms
+
+Test: Observe jitter values on uibench
+Change-Id: I0caa4d013f7eb183a88a061ae22e07c401b40eaa
+Signed-off-by: Vaisakh Murali <mvaisakh@statixos.com>
+---
+ libs/hwui/Android.bp | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/libs/hwui/Android.bp b/libs/hwui/Android.bp
+index f8612c2de..57655d0db 100644
+--- a/libs/hwui/Android.bp
++++ b/libs/hwui/Android.bp
+@@ -172,6 +172,7 @@ cc_defaults {
+     // TODO: Non-arm?
+     cflags: [
+         "-fno-omit-frame-pointer",
++        "-O3",
+     ],
+ }
+ 
+-- 
+2.47.0
+

@@ -1,0 +1,34 @@
+From 1222ca17f0a7cb110af8f0523bacee5f3e5ab219 Mon Sep 17 00:00:00 2001
+From: Danny Lin <danny@kdrag0n.dev>
+Date: Tue, 3 Nov 2020 22:43:12 -0800
+Subject: [PATCH 06/12] core: Remove old app target SDK dialog
+
+If an app is old, users should already know that, and there's usually no
+point in warning them about it because they would already be using a
+newer version if one existed. Sometimes, using an old app is necessary
+for one reason or another, so remove this annoyance and let the user use
+their old app in peace.
+
+[ItsVixano: Nuke ABI dialog as well]
+
+Change-Id: I1a3021f0f9bec1ab6ff7641776391e1bd4c3cc49
+---
+ services/core/java/com/android/server/wm/AppWarnings.java | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/services/core/java/com/android/server/wm/AppWarnings.java b/services/core/java/com/android/server/wm/AppWarnings.java
+index ad5f4427f..f7cb41fb0 100644
+--- a/services/core/java/com/android/server/wm/AppWarnings.java
++++ b/services/core/java/com/android/server/wm/AppWarnings.java
+@@ -210,8 +210,6 @@ class AppWarnings {
+     public void onStartActivity(ActivityRecord r) {
+         showUnsupportedCompileSdkDialogIfNeeded(r);
+         showUnsupportedDisplaySizeDialogIfNeeded(r);
+-        showDeprecatedTargetDialogIfNeeded(r);
+-        showDeprecatedAbiDialogIfNeeded(r);
+     }
+ 
+     /**
+-- 
+2.47.0
+

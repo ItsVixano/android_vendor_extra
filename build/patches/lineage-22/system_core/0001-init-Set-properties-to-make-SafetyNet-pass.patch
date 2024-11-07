@@ -1,0 +1,58 @@
+From 54f8a9080fd39b8dec321d8af7654219594b749c Mon Sep 17 00:00:00 2001
+From: Danny Lin <danny@kdrag0n.dev>
+Date: Wed, 7 Oct 2020 00:24:54 -0700
+Subject: [PATCH] init: Report valid verified boot for SafetyNet checks
+
+Google's SafetyNet integrity checks will check the values of these
+properties when performing basic attestation. Setting fake values helps
+us pass basic SafetyNet with no Magisk Hide or kernel patches necessary.
+
+Note that these properties need to be set very early, before parsing the
+kernel command-line, as they are read-only properties that the bootloader
+sets using androidboot kernel arguments. The bootloader's real values
+cause SafetyNet to fail with an unlocked bootloader and/or custom
+software because the verified boot chain is broken in that case.
+
+Change-Id: I66d23fd91d82906b00d5eb020668f01ae83ec31f
+---
+ init/property_service.cpp | 17 +++++++++++++++++
+ 1 file changed, 17 insertions(+)
+
+diff --git a/init/property_service.cpp b/init/property_service.cpp
+index c8e1e14c3..308d71338 100644
+--- a/init/property_service.cpp
++++ b/init/property_service.cpp
+@@ -1360,6 +1360,20 @@ static void ProcessBootconfig() {
+     });
+ }
+ 
++static void SetSafetyNetProps() {
++#ifdef RECOVERY
++    // Bail out if this is recovery, fastbootd, or anything other than a normal boot.
++    // fastbootd, in particular, needs the real values so it can allow flashing on
++    // unlocked bootloaders.
++    return;
++#endif
++
++    InitPropertySet("ro.boot.flash.locked", "1");
++    InitPropertySet("ro.boot.verifiedbootstate", "green");
++    InitPropertySet("ro.boot.veritymode", "enforcing");
++    InitPropertySet("ro.boot.vbmeta.device_state", "locked");
++}
++
+ void PropertyInit() {
+     selinux_callback cb;
+     cb.func_audit = PropertyAuditCallback;
+@@ -1374,6 +1388,9 @@ void PropertyInit() {
+         LOG(FATAL) << "Failed to load serialized property info file";
+     }
+ 
++    // Report valid verified boot chain to help pass Google SafetyNet integrity checks
++    SetSafetyNetProps();
++
+     // If arguments are passed both on the command line and in DT,
+     // properties set in DT always have priority over the command-line ones.
+     ProcessKernelDt();
+-- 
+2.43.0
+

@@ -1,0 +1,34 @@
+From 1687c123a5a3ffe9cf88808d9287a8f5b8c68a82 Mon Sep 17 00:00:00 2001
+From: Sourajit Karmakar <sourajitk@statixos.com>
+Date: Thu, 20 Apr 2023 22:37:29 -0400
+Subject: [PATCH 12/12] hwui: Compile without no-omit-frame-pointer
+
+By default, modern compilers optimize code by eliminating the frame pointer
+and using other techniques, such as register allocation and stack unwinding,
+to locate function parameters and local variables.
+
+Using the fno-omit-frame-pointer flag disables this optimization, which actually
+causes regression, instead of improvement.
+
+Suggestion by Kazuki.
+
+Change-Id: I2eb48741a8fded593cfeddb2fe83af638a2c68f2
+---
+ libs/hwui/Android.bp | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/libs/hwui/Android.bp b/libs/hwui/Android.bp
+index 1744b7a28..22a24656e 100644
+--- a/libs/hwui/Android.bp
++++ b/libs/hwui/Android.bp
+@@ -171,7 +171,6 @@ cc_defaults {
+     name: "hwui_compile_for_perf",
+     // TODO: Non-arm?
+     cflags: [
+-        "-fno-omit-frame-pointer",
+         "-O3",
+     ],
+ }
+-- 
+2.47.0
+

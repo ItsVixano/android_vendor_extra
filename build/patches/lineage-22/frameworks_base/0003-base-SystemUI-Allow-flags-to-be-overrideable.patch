@@ -1,0 +1,26 @@
+From a011633586f1bc154c26b30f4605196bad8616f1 Mon Sep 17 00:00:00 2001
+From: Jeferson <jroliveira.oliveira301@gmail.com>
+Date: Fri, 17 Jun 2022 15:01:28 +0200
+Subject: [PATCH 03/12] base: SystemUI: Allow flags to be overrideable
+
+Change-Id: Ibc17db2878c026120e831bb587a2d00d55ba4856
+---
+ packages/SystemUI/res/values/flags.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/packages/SystemUI/res/values/flags.xml b/packages/SystemUI/res/values/flags.xml
+index 763930db1..b3e8185ec 100644
+--- a/packages/SystemUI/res/values/flags.xml
++++ b/packages/SystemUI/res/values/flags.xml
+@@ -16,7 +16,7 @@
+   -->
+ 
+ <resources>
+-    <bool name="are_flags_overrideable">false</bool>
++    <bool name="are_flags_overrideable">true</bool>
+ 
+     <bool name="flag_monet">true</bool>
+ 
+-- 
+2.47.0
+
