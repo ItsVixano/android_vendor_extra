@@ -1,0 +1,47 @@
+From 41b7a71fa35f15b0da539e4d156c3c07b868a014 Mon Sep 17 00:00:00 2001
+From: Giovanni Ricca <giovanniricca@proton.me>
+Date: Fri, 8 Nov 2024 20:17:23 +0000
+Subject: [PATCH 7/7] soong: scripts: Only display `BuildId`
+
+* Matches Pixel behaviour
+
+Change-Id: I5a7b96973f64d7b4ee1a4a4a0de01f3a72270459
+---
+ scripts/gen_build_prop.py | 13 +------------
+ 1 file changed, 1 insertion(+), 12 deletions(-)
+
+diff --git a/scripts/gen_build_prop.py b/scripts/gen_build_prop.py
+index 5a3eae0..fe07705 100644
+--- a/scripts/gen_build_prop.py
++++ b/scripts/gen_build_prop.py
+@@ -118,7 +118,6 @@ def parse_args():
+   if args.build_thumbprint_file:
+     config["BuildThumbprint"] = args.build_thumbprint_file.read().strip()
+ 
+-  config["LineageDesc"] = config["BuildDesc"]
+   config["LineageDevice"] = config["DeviceName"]
+ 
+   override_config(config)
+@@ -207,18 +206,8 @@ def generate_build_info(args):
+     print(f"ro.build.id?={config['BuildId']}")
+ 
+   # ro.build.display.id is shown under Settings -> About Phone
+-  if config["BuildVariant"] == "user":
+-    # User builds should show:
+-    # release build number or branch.buld_number non-release builds
++  print(f"ro.build.display.id?={config['BuildId']}")
+ 
+-    # Dev. branches should have DISPLAY_BUILD_NUMBER set
+-    if config["DisplayBuildNumber"]:
+-      print(f"ro.build.display.id?={config['BuildId']}.{config['BuildNumber']} {config['BuildKeys']}")
+-    else:
+-      print(f"ro.build.display.id?={config['BuildId']} {config['BuildKeys']}")
+-  else:
+-    # Non-user builds should show detailed build information (See build desc above)
+-    print(f"ro.build.display.id?={config['LineageDesc']}")
+   print(f"ro.build.version.incremental={config['BuildNumber']}")
+   print(f"ro.build.version.sdk={config['Platform_sdk_version']}")
+   print(f"ro.build.version.preview_sdk={config['Platform_preview_sdk_version']}")
+-- 
+2.47.0
+

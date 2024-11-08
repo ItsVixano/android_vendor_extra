@@ -1,7 +1,7 @@
 From 7f227b87fca4b71e34058dbbbf081be81ca3dde3 Mon Sep 17 00:00:00 2001
 From: Daniel Micay <danielmicay@gmail.com>
 Date: Wed, 13 Oct 2021 19:54:06 -0400
-Subject: [PATCH 5/5] use speed compiler filter for dexpreopt by default
+Subject: [PATCH 5/7] use speed compiler filter for dexpreopt by default
 
 ---
  dexpreopt/dexpreopt.go | 2 +-

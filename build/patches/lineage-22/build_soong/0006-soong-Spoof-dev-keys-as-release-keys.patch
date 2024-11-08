@@ -1,0 +1,40 @@
+From d5468bbc9cd6a862b01e85d094e0c279f0b67062 Mon Sep 17 00:00:00 2001
+From: Giovanni Ricca <giovanniricca@proton.me>
+Date: Fri, 8 Nov 2024 20:05:35 +0000
+Subject: [PATCH 6/7] soong: Spoof `dev-keys` as `release-keys`
+
+Change-Id: I7885f2b3f9bf7c54b8a60ac9a67f092c7d0c21b4
+---
+ android/config.go         | 2 +-
+ scripts/gen_build_prop.py | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/android/config.go b/android/config.go
+index 9849c7d..865f558 100644
+--- a/android/config.go
++++ b/android/config.go
+@@ -1038,7 +1038,7 @@ func (c *config) BuildKeys() string {
+ 	if defaultCert == "" || defaultCert == filepath.Join(testKeyDir, "testkey") {
+ 		return "test-keys"
+ 	}
+-	return "dev-keys"
++	return "release-keys"
+ }
+ 
+ func (c *config) ApexKeyDir(ctx ModuleContext) SourcePath {
+diff --git a/scripts/gen_build_prop.py b/scripts/gen_build_prop.py
+index 6dffa03..5a3eae0 100644
+--- a/scripts/gen_build_prop.py
++++ b/scripts/gen_build_prop.py
+@@ -43,7 +43,7 @@ def get_build_keys(product_config):
+   default_cert = product_config.get("DefaultAppCertificate", "")
+   if default_cert == "" or default_cert == os.path.join(TEST_KEY_DIR, "testKey"):
+     return "test-keys"
+-  return "dev-keys"
++  return "release-keys"
+ 
+ def override_config(config):
+   if "PRODUCT_BUILD_PROP_OVERRIDES" in config:
+-- 
+2.47.0
+
