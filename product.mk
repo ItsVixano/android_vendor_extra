@@ -21,6 +21,10 @@ PRODUCT_PACKAGES += \
 # Boot animation
 TARGET_BOOTANIMATION_HALF_RES := true
 
+# MindTheGapps
+PRODUCT_EXTRA_RECOVERY_KEYS += \
+    vendor/extra/build/target/product/security/mindthegapps
+
 # Overlays
 PRODUCT_PACKAGES += \
     FrameworksResOverlay \
